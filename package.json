@@ -1,0 +1,14 @@
+{
+  "name": "fun-scoreboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trash Talk Live: every score, every stat, zero chill. Live sports scores with jokes, polls and a forum for every game.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trash Talk Live</title>
+  <meta name="description" content="Every score, every stat, zero chill. Live scores with jokes, polls and a trash-talk thread for every game.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏟️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="logo" href="#/" aria-label="Trash Talk Live home">
+      <span class="logo-ball" aria-hidden="true">🏟️</span>
+      <span class="logo-text">TRASH TALK <em>LIVE</em></span>
+    </a>
+    <nav class="nav">
+      <a href="#/" data-nav="scores">Scores</a>
+      <a href="#/hall" data-nav="hall">Hall of Takes</a>
+    </nav>
+    <button class="me-chip" id="meChip" type="button" title="Edit your fan identity">
+      <span id="meAvatar">🙂</span><span id="meName">…</span>
+    </button>
+  </header>
+
+  <div class="ticker" aria-label="Live joke ticker"><div class="ticker-track" id="ticker"></div></div>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="foot">
+    Scores via ESPN's public feed. Jokes via our unpaid intern. Opinions via you, sadly.
+  </footer>
+
+  <dialog id="meDialog" class="dialog">
+    <form method="dialog" id="meForm">
+      <h2>Who are you, fan?</h2>
+      <p class="muted">This is how you'll show up in every thread. No account, no email, no judgement (some judgement).</p>
+      <div class="avatar-pick" id="avatarPick"></div>
+      <label class="field">
+        <span>Display name</span>
+        <div class="row">
+          <input id="meInput" maxlength="24" minlength="2" required autocomplete="off">
+          <button type="button" class="btn ghost" id="reroll" title="Random name">🎲</button>
+        </div>
+      </label>
+      <div class="row end">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="ok" class="btn primary">Lock it in</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <script src="/app.js"></script>
+</body>
+</html>
