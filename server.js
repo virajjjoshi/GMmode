@@ -1,12 +1,19 @@
 // Trash Talk Live: zero-dependency Node server.
 // Serves the SPA in /public and a small JSON API on /api.
 
+if (typeof fetch !== 'function') {
+  console.error(`\n  Trash Talk Live needs Node 18+ (you're on ${process.version}).\n  Run: nvm use   (this repo's .nvmrc pins Node 22)\n`);
+  process.exit(1);
+}
+
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const espn = require('./lib/espn');
 const store = require('./lib/store');
 const humor = require('./lib/humor');
+const live = require('./lib/live');
+const fantasy = require('./lib/fantasy');
 
 const PORT = Number(process.env.PORT) || 4321;
 const PUBLIC = path.join(__dirname, 'public');
@@ -80,6 +87,7 @@ async function api(req, res, url) {
       const key = `${g.league}:${g.id}`;
       g.takeCount = store.listComments(key).length;
       g.poll = store.pollView(key);
+      g.viewers = live.viewers(key);
     }
     return send(res, 200, { date, games, failed: keys.filter((_, i) => results[i].status === 'rejected') });
   }
@@ -145,6 +153,67 @@ async function api(req, res, url) {
     if (method === 'DELETE') {
       try { store.deleteComment(id, me); return send(res, 200, { ok: true }); }
       catch { throw new HttpError(403, 'You can only delete your own takes.'); }
+    }
+  }
+
+  // ----- Live Rooms -----
+  if (parts[0] === 'live') {
+    const [, league, id, sub] = parts;
+    if (!espn.LEAGUES[league] || !isId(id)) throw bad('unknown game');
+    if (method === 'GET' && sub === 'stream') {
+      const fan = url.searchParams.get('fan');
+      if (!limit(ip, 'stream', 20, 60_000)) throw new HttpError(429, 'Too many reconnects. Chill for a minute.');
+      return live.join(league, id, isUid(fan) ? fan : null, req, res);
+    }
+    if (method === 'POST') {
+      if (!me) throw bad('Missing fan id. Refresh the page.');
+      if (!limit(ip, 'live', 60, 10_000)) throw new HttpError(429, 'Easy there, speed racer.');
+      const body = await readBody(req);
+      const name = clean(body.name, 24), avatar = clean(body.avatar, 8);
+      if (name.length < 2) throw bad('Pick a name first (2+ characters).');
+      store.touchUser(me, name, avatar);
+      if (sub === 'chat') {
+        const text = clean(body.text, 200);
+        if (!text) throw bad('Say something!');
+        return send(res, 201, live.chat(league, id, { uid: me, name, avatar, text }));
+      }
+      if (sub === 'react') { live.react(league, id, body.emoji, Number(body.n) || 1); return send(res, 200, { ok: true }); }
+      if (sub === 'call') {
+        if (!['home', 'away'].includes(body.side)) throw bad('Pick a side.');
+        return send(res, 200, live.makeCall(league, id, { uid: me, name, avatar, side: body.side, callId: clean(body.callId, 64) }));
+      }
+    }
+  }
+
+  // ----- Fantasy (Sleeper) -----
+  if (parts[0] === 'fantasy') {
+    const isNum = (v) => /^\d{1,25}$/.test(v || '');
+    if (method === 'GET' && parts[1] === 'sleeper' && parts[2] === 'user') {
+      const username = clean(decodeURIComponent(parts[3] || ''), 40);
+      if (!/^[A-Za-z0-9_.-]{2,40}$/.test(username)) throw bad('That doesn\'t look like a Sleeper username.');
+      return send(res, 200, await fantasy.connect(username));
+    }
+    if (method === 'GET' && parts[1] === 'sleeper' && parts[2] === 'league' && isNum(parts[3])) {
+      const user = url.searchParams.get('user'), week = url.searchParams.get('week');
+      if (!isNum(user)) throw bad('bad user');
+      if (week && !/^\d{1,2}$/.test(week)) throw bad('bad week');
+      if (parts[4] === 'mine') return send(res, 200, await fantasy.myPlayers(parts[3], user));
+      return send(res, 200, await fantasy.league(parts[3], user, week));
+    }
+    // One trash-talk thread per fantasy league, reusing the takes store.
+    if (parts[1] === 'thread' && isNum(parts[2])) {
+      const key = `fl:${parts[2]}`;
+      if (method === 'GET') return send(res, 200, { comments: store.listComments(key, me) });
+      if (method === 'POST') {
+        if (!me) throw bad('Missing fan id.');
+        if (!limit(ip, 'post', 1, 4000)) throw new HttpError(429, 'Cooldown! Let that last take breathe for a few seconds.');
+        const body = await readBody(req);
+        const name = clean(body.name, 24), avatar = clean(body.avatar, 8), text = clean(body.text, 500);
+        if (name.length < 2 || text.length < 2) throw bad('Need a name and a take.');
+        store.setLabel(key, `${clean(body.leagueName, 40) || 'Fantasy league'} (Fantasy)`);
+        try { return send(res, 201, store.addComment(key, { uid: me, name, avatar, text, heat: 'spicy', parentId: body.parentId ? clean(body.parentId, 64) : null })); }
+        catch (e) { throw bad(e.message); }
+      }
     }
   }
 

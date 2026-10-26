@@ -177,9 +177,15 @@ function route() {
   clearTimers();
   const h = location.hash.replace(/^#\/?/, '');
   const [view, a, b] = h.split('/');
-  $$('.nav a').forEach((el) => el.classList.toggle('active', el.dataset.nav === (view === 'hall' ? 'hall' : 'scores')));
+  if (typeof leaveLive === 'function') leaveLive();
+  const nav = ['hall', 'fantasy', 'live'].includes(view) ? view : 'scores';
+  $$('.nav a').forEach((el) => el.classList.toggle('active', el.dataset.nav === nav));
+  document.body.dataset.view = view || 'scores';
   window.scrollTo(0, 0);
   if (view === 'game' && a && b) return renderGame(a, b);
+  if (view === 'live' && a && b) return renderLive(a, b);
+  if (view === 'live') return renderLiveLobby();
+  if (view === 'fantasy') return renderFantasy();
   if (view === 'hall') return renderHall();
   return renderScores();
 }
@@ -250,6 +256,7 @@ async function renderScores() {
     sb.league = b.dataset.league; store.set('ttl:league', sb.league); paintGames();
   };
 
+  loadFantasyMap().then(() => sb.games.length && paintGames(true));
   await loadGames();
   every(async () => { if (sb.games.some((g) => g.status.state === 'in')) await loadGames(true); }, 30000);
 }
@@ -324,14 +331,19 @@ function cardHTML(g) {
   const p = g.poll || { home: 0, away: 0 };
   const pt = p.home + p.away;
   const pollTxt = pt ? `🗳 ${Math.round((Math.max(p.home, p.away) / pt) * 100)}% ${esc((p.home >= p.away ? g.home : g.away)?.abbr)}` : '🗳 no picks yet';
-  return `<a class="card" href="#/game/${esc(g.league)}/${esc(g.id)}" data-key="${esc(g.league)}:${esc(g.id)}" style="--away-c:${a};--home-c:${h}">
+  const liveNow = st === 'in';
+  const href = liveNow ? `#/live/${esc(g.league)}/${esc(g.id)}` : `#/game/${esc(g.league)}/${esc(g.id)}`;
+  return `<a class="card ${liveNow ? 'is-live' : ''}" href="${href}" data-key="${esc(g.league)}:${esc(g.id)}" style="--away-c:${a};--home-c:${h}">
     <div class="card-top"><span>${g.emoji} ${esc(g.leagueLabel)}${g.broadcast ? ` · ${esc(g.broadcast)}` : ''}</span>${statusLabel(g)}</div>
     ${row(g.away, g.home)}
     ${row(g.home, g.away)}
     <span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span>
     <p class="vibe">${esc(g.vibe.line)}</p>
     ${st === 'pre' ? '' : `<div class="chaos" title="How unhinged this game is"><span>Chaos</span><div class="chaos-bar"><i style="width:${g.vibe.chaos}%"></i></div><span>${g.vibe.chaos}</span></div>`}
-    <div class="card-foot"><span>💬 ${g.takeCount} take${g.takeCount === 1 ? '' : 's'} · ${pollTxt}</span><span class="enter">Enter the thread →</span></div>
+    ${fantasyChip(g)}
+    <div class="card-foot"><span>💬 ${g.takeCount} take${g.takeCount === 1 ? '' : 's'} · ${pollTxt}</span>${liveNow
+      ? `<span class="enter live-enter">🔴 ${g.viewers ? `${g.viewers} watching · ` : ''}Join live →</span>`
+      : '<span class="enter">Enter the thread →</span>'}</div>
   </a>`;
 }
 
@@ -444,7 +456,8 @@ function paintGameStatic() {
       </div>
       <div class="sh-team">${logo(g.home)}<div class="nm">${g.home?.rank ? `#${g.home.rank} ` : ''}${esc(g.home?.full || g.home?.name)}</div><div class="rec">${esc(g.home?.record || '')}</div></div>
     </div>
-    <div class="sh-badge"><span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span></div>`;
+    <div class="sh-badge"><span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span></div>
+    ${st !== 'post' ? `<div class="sh-badge"><a class="btn primary live-cta" href="#/live/${esc(g.league)}/${esc(g.id)}">${st === 'in' ? '🔴 Join the Live Room' : '📺 Live Room opens at kickoff, get in early'}</a></div>` : ''}`;
 
   $('#intern').innerHTML = d.commentary.map((line, i) =>
     `<li><div class="mic">${['🎙️', '🤓', '📢', '🧃', '🫠'][i % 5]}</div><div class="bubble">${esc(line)}</div></li>`).join('');
@@ -749,7 +762,7 @@ async function renderHall() {
       <div class="av">${esc(c.avatar || '🙂')}</div>
       <div class="take-body"><div class="take-meta"><b>${esc(c.name)}</b><span class="heat-tag ${esc(c.heat)}">${esc(c.heat)}</span><span class="t">${ago(c.createdAt)}</span></div>
       <p class="take-text">${esc(c.text)}</p>
-      <div class="take-meta"><span>🔥 ${c.fire} · 🧢 ${c.cap}</span><a class="take-link" href="#/game/${esc(c.gameKey.replace(':', '/'))}">${esc(c.gameLabel)} →</a></div></div></article>`;
+      <div class="take-meta"><span>🔥 ${c.fire} · 🧢 ${c.cap}</span><a class="take-link" href="${c.gameKey.startsWith('fl:') ? '#/fantasy' : `#/game/${esc(c.gameKey.replace(':', '/'))}`}">${esc(c.gameLabel)} →</a></div></div></article>`;
   const empty = (msg) => `<p class="muted">${msg}</p>`;
   app.innerHTML = `<h1 class="hero-title">HALL OF <span class="hl">TAKES</span></h1>
     <p class="hero-sub">${d.totals.takes} takes across ${d.totals.games} games. The hottest takes, the sharpest prophets, and the clowns who made it all worthwhile.</p>
