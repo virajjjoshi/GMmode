@@ -12,6 +12,7 @@ What we're building, in what order, and the decisions still open.
 |---|---|
 | v0.1 | Scores for 10 leagues, vibe badges, chaos meter, intern commentary, a thread per game, polls, reactions, Hall of Takes |
 | **v0.2 (this build)** | **Live Rooms** (Twitch-style chat, reaction bursts, hype meter, "Who scores next?" calls, play-by-play bot). **Fantasy** (connect Sleeper, live matchup, Fantasy Therapist, bench regret, your players flagged on game cards and in live rooms, trash-talk thread per league) |
+| v0.2.1 | Filter fixes (state in the URL, live counts, clear button, team search), Game of the Night spotlight, Tour page, labeled demo crowd for live rooms |
 
 ## Pillars
 

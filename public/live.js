@@ -5,7 +5,7 @@
 const lv = {
   es: null, league: null, id: null, game: null, call: null, myPick: null, myPickAt: 0,
   leaders: [], viewers: 0, hype: 0, pending: {}, ownSent: {}, reactTimer: null, tab: 'chat',
-  stuckToBottom: true, unseen: 0, lockMs: 45000, lockTimer: null,
+  stuckToBottom: true, unseen: 0, lockMs: 45000, lockTimer: null, demo: 0,
 };
 const LIVE_REACTS = ['🔥', '😂', '😱', '🙌', '💀', '🤡', '🐐', '🧂', '😭', '🚀'];
 const EMOTES = ['LETS GOOO', 'W', 'L', 'REFS??', 'Called it', 'Unreal', 'Fraud watch 🚨', 'Ice cold 🧊'];
@@ -45,7 +45,9 @@ function renderLive(league, id) {
   Object.assign(lv, { league, id, game: null, call: null, myPick: null, leaders: [], pending: {}, ownSent: {}, tab: 'chat', stuckToBottom: true, unseen: 0 });
   const app = $('#app');
   app.innerHTML = `
-    <div class="live-top"><a class="back" href="#/live">← All live rooms</a><a class="back" href="#/game/${esc(league)}/${esc(id)}">Game page &amp; thread →</a></div>
+    <div class="live-top"><a class="back" href="#/live">← All live rooms</a>
+      <span class="live-top-r"><button type="button" class="btn ghost demo-btn" id="demoBtn" title="Fill the room with clearly-labelled simulated fans, for demos">🧪 Simulate a crowd</button>
+      <a class="back" href="#/game/${esc(league)}/${esc(id)}">Game page &amp; thread →</a></span></div>
     <div class="live-wrap">
       <section class="stage-col">
         <div class="stage" id="stage"><div class="stage-loading">Finding our seats…</div></div>
@@ -98,7 +100,7 @@ function connectLive() {
 function onLiveEvent(ev) {
   switch (ev.type) {
     case 'hello':
-      lv.game = ev.game; lv.call = ev.call; lv.leaders = ev.leaders; lv.viewers = ev.viewers;
+      lv.game = ev.game; lv.call = ev.call; lv.leaders = ev.leaders; lv.viewers = ev.viewers; lv.demo = ev.demo || 0;
       if (ev.call?.mine) lv.myPick = ev.call.mine;
       $('#chatLog').innerHTML = '';
       if (!ev.messages.length) systemNote('Welcome to the room. Be the first to say something unhinged.');
@@ -108,7 +110,7 @@ function onLiveEvent(ev) {
       break;
     case 'chat': appendMsg(ev.msg, true); break;
     case 'game': lv.game = ev.game; paintStage(); paintCall(); break;
-    case 'viewers': lv.viewers = ev.viewers; paintViewers(); break;
+    case 'viewers': lv.viewers = ev.viewers; lv.demo = ev.demo || 0; paintViewers(); paintStageDemo(); break;
     case 'burst': onBurst(ev); break;
     case 'call':
       if (!ev.call || ev.call.id !== lv.call?.id) { lv.myPick = null; lv.myPickAt = 0; }
@@ -129,7 +131,7 @@ function paintStage() {
   const st = g.status.state;
   const wp = g.winProb?.length ? g.winProb[g.winProb.length - 1] : null;
   const wpTxt = wp == null ? '' : wp >= 50 ? `${esc(g.home.abbr)} ${Math.round(wp)}% to win` : `${esc(g.away.abbr)} ${Math.round(100 - wp)}% to win`;
-  const team = (t) => `<div class="st-team">${logo(t)}<div class="st-name">${esc(t?.name)}</div><div class="st-rec">${esc(t?.record || '')}</div></div>`;
+  const team = (t) => `<div class="st-team">${logo(t)}<div class="st-name nm-full">${esc(t?.name)}</div><div class="st-name nm-abbr">${esc(t?.abbr)}</div><div class="st-rec">${esc(t?.record || '')}</div></div>`;
   el.innerHTML = `
     <div class="stage-top">
       ${st === 'in' ? '<span class="live-pill"><span class="dot"></span>LIVE</span>' : st === 'post' ? '<span class="live-pill off">FINAL</span>' : '<span class="live-pill off">SOON</span>'}
@@ -149,6 +151,7 @@ function paintStage() {
     ${g.lastPlay ? `<div class="lower-third"><b>LAST PLAY</b><span>${esc(g.lastPlay)}</span></div>` : ''}
     <div class="burst-layer" id="burst"></div>
     <div class="score-flash" id="flash"></div>`;
+  paintStageDemo();
 }
 
 function scoreFlash(ev) {
@@ -221,10 +224,20 @@ function paintCall() {
 function paintCallers() {
   const el = $('#callers'); if (!el) return;
   el.innerHTML = lv.leaders.length
-    ? `<ol class="board">${lv.leaders.map((u) => `<li><span class="av">${esc(u.avatar || '🙂')}</span><span class="who" style="color:${esc(u.color)}">${esc(u.name)}${u.name === me.name ? ' (you)' : ''}</span><span class="stat">${u.pts} pts${u.streak > 1 ? ` · 🔥${u.streak}` : ''}</span></li>`).join('')}</ol>`
+    ? `<ol class="board">${lv.leaders.map((u) => `<li><span class="av">${esc(u.avatar || '🙂')}</span><span class="who" style="color:${esc(u.color)}">${u.sim ? '<span class="sim-tag">SIM</span> ' : ''}${esc(u.name)}${!u.sim && u.name === me.name ? ' (you)' : ''}</span><span class="stat">${u.pts} pts${u.streak > 1 ? ` · 🔥${u.streak}` : ''}</span></li>`).join('')}</ol>`
     : '<p class="muted" style="padding:12px">No callers yet. Make a call on the left and get on the board.</p>';
 }
-function paintViewers() { const v = $('#viewers'); if (v) v.textContent = `👀 ${lv.viewers} watching`; }
+function paintViewers() {
+  const v = $('#viewers'); if (v) v.textContent = `👀 ${lv.viewers} watching${lv.demo ? ` · 🧪 ${lv.demo} sim` : ''}`;
+  const b = $('#demoBtn');
+  if (b) { b.textContent = lv.demo ? '🧪 Demo crowd on · turn off' : '🧪 Simulate a crowd'; b.classList.toggle('on', !!lv.demo); }
+}
+function paintStageDemo() {
+  const top = $('.stage-top'); if (!top) return;
+  let pill = $('.demo-pill', top);
+  if (lv.demo && !pill) top.insertAdjacentHTML('beforeend', '<span class="demo-pill" title="Simulated fans are in this room">🧪 DEMO CROWD</span>');
+  if (!lv.demo && pill) pill.remove();
+}
 
 // ---------- chat ----------
 function systemNote(text) { appendMsg({ id: `sys-${Date.now()}`, kind: 'system', name: '', text, t: Date.now() }, false); }
@@ -237,7 +250,7 @@ function appendMsg(msg, live) {
   const mention = msg.kind === 'user' && me.name.length > 2 && msg.text.toLowerCase().includes(`@${me.name.toLowerCase()}`);
   if (mention) el.classList.add('mention');
   if (msg.kind === 'user') {
-    el.innerHTML = `<span class="m-av">${esc(msg.avatar || '🙂')}</span><button type="button" class="m-name" style="color:${esc(msg.color)}" data-name="${esc(msg.name)}">${esc(msg.name)}</button><span class="m-text">${esc(msg.text)}</span>`;
+    el.innerHTML = `<span class="m-av">${esc(msg.avatar || '🙂')}</span>${msg.sim ? '<span class="sim-tag" title="Simulated fan (demo crowd)">SIM</span>' : ''}<button type="button" class="m-name" style="color:${esc(msg.color)}" data-name="${esc(msg.name)}">${esc(msg.name)}</button><span class="m-text">${esc(msg.text)}</span>`;
   } else if (msg.kind === 'system' && !msg.name) {
     el.innerHTML = `<span class="m-text">${esc(msg.text)}</span>`;
   } else {
@@ -265,6 +278,13 @@ async function sendChat(text) {
 }
 
 function wireLive() {
+  $('#demoBtn').onclick = async () => {
+    try {
+      const r = await api(`/live/${lv.league}/${lv.id}/demo`, { method: 'POST', body: { on: !lv.demo } });
+      lv.demo = r.demo; paintViewers(); paintStageDemo();
+      if (lv.demo) toast('🧪 Demo crowd on. Every simulated fan is tagged SIM.');
+    } catch (e) { toast(e.message, true); }
+  };
   const log = $('#chatLog');
   log.onscroll = () => {
     lv.stuckToBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;

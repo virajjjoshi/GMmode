@@ -178,6 +178,7 @@ async function api(req, res, url) {
         return send(res, 201, live.chat(league, id, { uid: me, name, avatar, text }));
       }
       if (sub === 'react') { live.react(league, id, body.emoji, Number(body.n) || 1); return send(res, 200, { ok: true }); }
+      if (sub === 'demo') return send(res, 200, live.setDemo(league, id, !!body.on));
       if (sub === 'call') {
         if (!['home', 'away'].includes(body.side)) throw bad('Pick a side.');
         return send(res, 200, live.makeCall(league, id, { uid: me, name, avatar, side: body.side, callId: clean(body.callId, 64) }));

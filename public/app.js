@@ -176,9 +176,9 @@ async function loadTicker() {
 function route() {
   clearTimers();
   const h = location.hash.replace(/^#\/?/, '');
-  const [view, a, b] = h.split('/');
+  const [view, a, b] = h.split('?')[0].split('/');
   if (typeof leaveLive === 'function') leaveLive();
-  const nav = ['hall', 'fantasy', 'live'].includes(view) ? view : 'scores';
+  const nav = ['hall', 'fantasy', 'live', 'tour'].includes(view) ? view : 'scores';
   $$('.nav a').forEach((el) => el.classList.toggle('active', el.dataset.nav === nav));
   document.body.dataset.view = view || 'scores';
   window.scrollTo(0, 0);
@@ -186,6 +186,7 @@ function route() {
   if (view === 'live' && a && b) return renderLive(a, b);
   if (view === 'live') return renderLiveLobby();
   if (view === 'fantasy') return renderFantasy();
+  if (view === 'tour') return renderTour();
   if (view === 'hall') return renderHall();
   return renderScores();
 }
@@ -194,14 +195,32 @@ function route() {
 // SCORES
 // =================================================================
 const sb = {
-  league: store.get('ttl:league', 'all'),
-  date: ymd(new Date()),
-  filter: store.get('ttl:filter', 'all'),
-  sort: store.get('ttl:sort', 'league'),
-  leagues: [],
-  games: [],
-  prev: new Map(),
+  league: 'all', date: ymd(new Date()), filter: 'all', sort: 'league', q: '',
+  leagues: [], games: [], prev: new Map(), takes: 0,
 };
+const SB_DEFAULT = { league: 'all', filter: 'all', sort: 'league', q: '' };
+
+// Filters live in the URL (#/?league=nfl&status=in), not localStorage, so a
+// fresh visit always starts on "everything" and filtered views are shareable.
+function readScoreParams() {
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  sb.league = q.get('league') || 'all';
+  sb.filter = ['in', 'pre', 'post'].includes(q.get('status')) ? q.get('status') : 'all';
+  sb.sort = ['chaos', 'takes'].includes(q.get('sort')) ? q.get('sort') : 'league';
+  sb.q = (q.get('q') || '').slice(0, 40);
+  if (/^\d{8}$/.test(q.get('date') || '')) sb.date = q.get('date');
+}
+function writeScoreParams() {
+  const q = new URLSearchParams();
+  if (sb.league !== 'all') q.set('league', sb.league);
+  if (sb.filter !== 'all') q.set('status', sb.filter);
+  if (sb.sort !== 'league') q.set('sort', sb.sort);
+  if (sb.q) q.set('q', sb.q);
+  if (sb.date !== ymd(new Date())) q.set('date', sb.date);
+  const qs = q.toString();
+  history.replaceState(null, '', `#/${qs ? `?${qs}` : ''}`); // replaceState: no hashchange, no re-render
+}
+const isFiltered = () => sb.league !== 'all' || sb.filter !== 'all' || sb.q;
 
 const SUBTITLES = [
   'Every score. Every stat. Zero chill.',
@@ -209,12 +228,15 @@ const SUBTITLES = [
   'Where hot takes come to be judged.',
   'Like a sports app, but it roasts.',
 ];
+const STATUS = [['all', 'Everything'], ['in', '🔴 Live'], ['pre', '⏳ Upcoming'], ['post', '✅ Final']];
 
 async function renderScores() {
+  readScoreParams();
   const app = $('#app');
   if (!sb.leagues.length) sb.leagues = await api('/leagues').catch(() => []);
   const today = ymd(new Date());
   app.innerHTML = `
+    <section class="spot-wrap" id="spot"></section>
     <h1 class="hero-title">THE <span class="hl">SCOREBOARD</span> OF CHAOS</h1>
     <p class="hero-sub">${esc(rand(SUBTITLES))}</p>
     <div class="controls">
@@ -224,11 +246,9 @@ async function renderScores() {
         <input type="date" id="datePick" value="${isoDate(sb.date)}" aria-label="Pick a date">
         <button type="button" data-shift="1" aria-label="Next day">▶</button>
       </div>
-      <div class="chips" id="filters" role="group" aria-label="Status filter">
-        ${[['all', 'Everything'], ['in', '🔴 Live'], ['pre', '⏳ Upcoming'], ['post', '✅ Final']]
-          .map(([k, l]) => `<button class="chip" data-filter="${k}" aria-pressed="${sb.filter === k}">${l}</button>`).join('')}
-      </div>
+      <div class="chips" id="filters" role="group" aria-label="Status filter"></div>
       <span class="spacer"></span>
+      <label class="search"><span aria-hidden="true">🔎</span><input id="teamSearch" type="search" placeholder="Find a team…" value="${esc(sb.q)}" aria-label="Find a team" autocomplete="off"><kbd>/</kbd></label>
       <select class="select" id="sortSel" aria-label="Sort">
         <option value="league" ${sb.sort === 'league' ? 'selected' : ''}>Group by league</option>
         <option value="chaos" ${sb.sort === 'chaos' ? 'selected' : ''}>🌪️ Most chaotic first</option>
@@ -236,27 +256,36 @@ async function renderScores() {
       </select>
     </div>
     <div class="chips" id="leagueChips" role="group" aria-label="League"></div>
+    <div class="result-line" id="resultLine" aria-live="polite"></div>
     <div id="games"><div class="grid">${'<div class="skeleton"></div>'.repeat(6)}</div></div>`;
 
   $('.datebar', app).onclick = (e) => {
     const b = e.target.closest('button[data-shift]'); if (!b) return;
     const s = +b.dataset.shift;
     const d = s === 0 ? new Date() : fromYmd(sb.date); if (s) d.setDate(d.getDate() + s);
-    sb.date = ymd(d); renderScores();
+    sb.date = ymd(d); writeScoreParams(); renderScores();
   };
-  $('#datePick').onchange = (e) => { if (e.target.value) { sb.date = e.target.value.replaceAll('-', ''); renderScores(); } };
+  $('#datePick').onchange = (e) => { if (e.target.value) { sb.date = e.target.value.replaceAll('-', ''); writeScoreParams(); renderScores(); } };
   $('#filters').onclick = (e) => {
     const b = e.target.closest('[data-filter]'); if (!b) return;
-    sb.filter = b.dataset.filter; store.set('ttl:filter', sb.filter);
-    $$('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', x === b)); paintGames();
+    sb.filter = b.dataset.filter; writeScoreParams(); paintGames();
   };
-  $('#sortSel').onchange = (e) => { sb.sort = e.target.value; store.set('ttl:sort', sb.sort); paintGames(); };
+  $('#sortSel').onchange = (e) => { sb.sort = e.target.value; writeScoreParams(); paintGames(); };
   $('#leagueChips').onclick = (e) => {
     const b = e.target.closest('[data-league]'); if (!b) return;
-    sb.league = b.dataset.league; store.set('ttl:league', sb.league); paintGames();
+    sb.league = sb.league === b.dataset.league && b.dataset.league !== 'all' ? 'all' : b.dataset.league; // tap again to clear
+    writeScoreParams(); paintGames();
+  };
+  let searchT;
+  $('#teamSearch').oninput = (e) => { clearTimeout(searchT); searchT = setTimeout(() => { sb.q = e.target.value.trim(); writeScoreParams(); paintGames(); }, 150); };
+  $('#resultLine').onclick = (e) => {
+    if (!e.target.closest('[data-clear]')) return;
+    Object.assign(sb, SB_DEFAULT); $('#teamSearch').value = ''; $('#sortSel').value = 'league';
+    writeScoreParams(); paintGames();
   };
 
   loadFantasyMap().then(() => sb.games.length && paintGames(true));
+  api('/hall').then((h) => { sb.takes = h.totals.takes; paintSpotlight(); }).catch(() => {});
   await loadGames();
   every(async () => { if (sb.games.some((g) => g.status.state === 'in')) await loadGames(true); }, 30000);
 }
@@ -266,30 +295,53 @@ async function loadGames(quiet = false) {
     const { games } = await api(`/scoreboard?league=all&date=${sb.date}`);
     sb.games = games;
     paintGames(quiet);
+    paintSpotlight(quiet);
   } catch (e) {
     if (!quiet) $('#games').innerHTML = `<div class="empty-state"><div class="big">📡</div><p>${esc(e.message)}</p><button class="btn primary" onclick="route()">Try again</button></div>`;
   }
 }
 
+const matchesQuery = (g, q) => !q || [g.home, g.away].some((t) => t && [t.name, t.full, t.abbr, t.location].some((v) => v && v.toLowerCase().includes(q)));
+
 function paintGames(quiet = false) {
-  const counts = {};
-  for (const g of sb.games) counts[g.league] = (counts[g.league] || 0) + 1;
-  const live = sb.games.filter((g) => g.status.state === 'in').length;
+  if (!$('#games')) return;
+  const q = sb.q.toLowerCase();
+  const inLeague = (g) => sb.league === 'all' || g.league === sb.league;
+  const inStatus = (g) => sb.filter === 'all' || g.status.state === sb.filter;
+  const base = sb.games.filter((g) => matchesQuery(g, q));
+
+  // Each control's counts respect the *other* active filters, so numbers always match what you'll see.
+  const statusCount = (k) => base.filter((g) => inLeague(g) && (k === 'all' || g.status.state === k)).length;
+  $('#filters').innerHTML = STATUS.map(([k, l]) => {
+    const n = statusCount(k);
+    return `<button class="chip ${n ? '' : 'empty'} ${k === 'in' && n ? 'chip-live' : ''}" data-filter="${k}" aria-pressed="${sb.filter === k}">${l} <span class="count">${n}</span></button>`;
+  }).join('');
+  const leagueCount = (key) => base.filter((g) => (key === 'all' || g.league === key) && inStatus(g)).length;
+  const live = base.filter((g) => inLeague(g) && g.status.state === 'in').length;
   $('#leagueChips').innerHTML = [
-    `<button class="chip" data-league="all" aria-pressed="${sb.league === 'all'}">🌎 All sports <span class="count">${sb.games.length}${live ? ` · ${live} live` : ''}</span></button>`,
-    ...sb.leagues.map((l) => `<button class="chip ${counts[l.key] ? '' : 'empty'}" data-league="${l.key}" aria-pressed="${sb.league === l.key}">${l.emoji} ${esc(l.label)} <span class="count">${counts[l.key] || 0}</span></button>`),
+    `<button class="chip" data-league="all" aria-pressed="${sb.league === 'all'}">🌎 All sports <span class="count">${leagueCount('all')}</span></button>`,
+    ...sb.leagues.map((l) => { const n = leagueCount(l.key); return `<button class="chip ${n ? '' : 'empty'}" data-league="${l.key}" aria-pressed="${sb.league === l.key}">${l.emoji} ${esc(l.label)} <span class="count">${n}</span></button>`; }),
   ].join('');
 
-  let list = sb.games.filter((g) => (sb.league === 'all' || g.league === sb.league) && (sb.filter === 'all' || g.status.state === sb.filter));
+  const list = base.filter((g) => inLeague(g) && inStatus(g));
   const order = { in: 0, pre: 1, post: 2 };
   const byState = (x, y) => order[x.status.state] - order[y.status.state] || new Date(x.date) - new Date(y.date);
 
+  // What you're looking at, in words, plus a one-tap reset.
+  const parts = [];
+  if (sb.filter !== 'all') parts.push(STATUS.find(([k]) => k === sb.filter)[1].replace(/^\S+ /, '').toLowerCase());
+  const lg = sb.leagues.find((l) => l.key === sb.league);
+  const leaguesShown = new Set(list.map((g) => g.league)).size;
+  $('#resultLine').innerHTML = `<span>Showing <b>${list.length}</b> ${parts.join(' ')} game${list.length === 1 ? '' : 's'}${lg ? ` in <b>${esc(lg.label)}</b>` : leaguesShown > 1 ? ` across ${leaguesShown} leagues` : ''}${sb.q ? ` matching "<b>${esc(sb.q)}</b>"` : ''}${live && sb.filter !== 'in' ? ` · <span class="live-txt">${live} live now</span>` : ''}</span>${isFiltered() ? '<button type="button" class="clear-btn" data-clear>✕ Clear filters</button>' : ''}`;
+
   const el = $('#games');
   if (!list.length) {
-    const msgs = sb.filter === 'in'
-      ? ['Nothing live right now. Perfect time to refill the snacks.', '🍿']
+    const msgs = sb.q ? [`No games for "${sb.q}" on this date. Maybe they're on a bye. Maybe they're in hiding.`, '🕵️']
+      : sb.filter === 'in' ? ['Nothing live right now. Perfect time to refill the snacks.', '🍿']
       : ['No games here. The athletes are presumably at brunch.', '🥞'];
-    el.innerHTML = `<div class="empty-state"><div class="big">${msgs[1]}</div><p>${msgs[0]}</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="big">${msgs[1]}</div><p>${esc(msgs[0])}</p>${isFiltered() ? '<button class="btn primary" type="button" data-clear-empty>Show everything</button>' : ''}</div>`;
+    const btn = $('[data-clear-empty]', el);
+    if (btn) btn.onclick = () => $('#resultLine [data-clear]')?.click();
     return;
   }
   if (sb.sort === 'chaos') {
@@ -314,6 +366,83 @@ function paintGames(quiet = false) {
     }
     sb.prev.set(k, now);
   }
+}
+
+// ---------- spotlight: game of the night + live counters ----------
+function pickSpotlight(games) {
+  const live = games.filter((g) => g.status.state === 'in' && g.home && g.away);
+  if (live.length) return { g: [...live].sort((a, b) => b.vibe.chaos - a.vibe.chaos || (b.viewers || 0) - (a.viewers || 0))[0], label: '🔥 GAME OF THE NIGHT' };
+  const soon = games.filter((g) => g.status.state === 'pre').sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (soon.length) return { g: soon[0], label: '⏳ UP NEXT' };
+  const done = games.filter((g) => g.status.state === 'post').sort((a, b) => b.vibe.chaos - a.vibe.chaos);
+  return done.length ? { g: done[0], label: '🏆 GAME OF THE DAY' } : null;
+}
+
+function countUp(el, to) {
+  const from = Number(el.dataset.v || 0);
+  el.dataset.v = to;
+  if (reduceMotion || from === to) { el.textContent = to.toLocaleString(); return; }
+  const t0 = performance.now(), dur = 900;
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - (1 - k) ** 3;
+    el.textContent = Math.round(from + (to - from) * e).toLocaleString();
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function paintSpotlight(quiet = false) {
+  const el = $('#spot'); if (!el || !sb.games.length) return;
+  const games = sb.games;
+  const live = games.filter((g) => g.status.state === 'in').length;
+  const leagues = new Set(games.map((g) => g.league)).size;
+  const watching = games.reduce((a, g) => a + (g.viewers || 0), 0);
+  const sp = pickSpotlight(games);
+  const fresh = !el.dataset.ready;
+  if (fresh) {
+    el.innerHTML = `<div class="spot" id="spotCard"></div>
+      <div class="stats">
+        <div class="stat"><b data-k="live">0</b><span>live now</span></div>
+        <div class="stat"><b data-k="games">0</b><span>games ${sb.date === ymd(new Date()) ? 'today' : 'on this day'}</span></div>
+        <div class="stat"><b data-k="leagues">0</b><span>leagues</span></div>
+        <div class="stat"><b data-k="takes">0</b><span>takes posted</span></div>
+        <div class="stat"><b data-k="watching">0</b><span>in live rooms</span></div>
+      </div>`;
+    el.dataset.ready = '1';
+  }
+  const vals = { live, games: games.length, leagues, takes: sb.takes, watching };
+  for (const [k, v] of Object.entries(vals)) {
+    const b = $(`[data-k="${k}"]`, el); if (!b) continue;
+    b.parentElement.hidden = !v && k !== 'games'; // a wall of zeros says nothing; show tiles once they have a number
+    countUp(b, v);
+  }
+  $('[data-k="live"]', el)?.parentElement.classList.toggle('hot', live > 0);
+
+  const card = $('#spotCard');
+  if (!sp) { card.hidden = true; return; }
+  card.hidden = false;
+  const g = sp.g, { a, h } = sideColors(g), st = g.status.state;
+  const sc = (t) => (st === 'pre' ? '' : esc(t?.score ?? 0));
+  const cta = st === 'in'
+    ? `<a class="btn primary" href="#/live/${esc(g.league)}/${esc(g.id)}">🔴 Join the live room${g.viewers ? ` · ${g.viewers} watching` : ''}</a>`
+    : `<a class="btn primary" href="#/game/${esc(g.league)}/${esc(g.id)}">${st === 'pre' ? '🗳️ Make your pick' : '💬 Read the takes'}</a>`;
+  card.style.setProperty('--away-c', a); card.style.setProperty('--home-c', h);
+  card.innerHTML = `
+    <div class="spot-label">${sp.label} <span>${g.emoji} ${esc(g.leagueLabel)}${g.broadcast ? ` · 📺 ${esc(g.broadcast)}` : ''}</span></div>
+    <div class="spot-main">
+      <div class="spot-team">${logo(g.away)}<b class="nm-full">${esc(g.away?.name)}</b><b class="nm-abbr">${esc(g.away?.abbr)}</b><small>${esc(g.away?.record || '')}</small></div>
+      <div class="spot-mid">
+        <div class="spot-score">${st === 'pre' ? '<i>VS</i>' : `<span>${sc(g.away)}</span><i>–</i><span>${sc(g.home)}</span>`}</div>
+        <div class="spot-status">${statusLabel(g)}</div>
+      </div>
+      <div class="spot-team">${logo(g.home)}<b class="nm-full">${esc(g.home?.name)}</b><b class="nm-abbr">${esc(g.home?.abbr)}</b><small>${esc(g.home?.record || '')}</small></div>
+    </div>
+    <div class="spot-foot">
+      <span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span>
+      <p>${esc(g.vibe.line)}</p>
+      ${st === 'pre' ? '' : `<div class="chaos spot-chaos"><span>Chaos</span><div class="chaos-bar"><i style="width:${g.vibe.chaos}%"></i></div><span>${g.vibe.chaos}</span></div>`}
+      <div class="spot-cta">${cta}<a class="btn ghost" href="#/game/${esc(g.league)}/${esc(g.id)}">Game page →</a></div>
+    </div>`;
 }
 
 function cardHTML(g) {
@@ -781,6 +910,10 @@ async function renderHall() {
 paintMe();
 $('#meChip').onclick = openMeDialog;
 window.addEventListener('hashchange', route);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  const s = $('#teamSearch'); if (s) { e.preventDefault(); s.focus(); }
+});
 route();
 loadTicker();
 setInterval(() => { if (!document.hidden) loadTicker(); }, 60000);

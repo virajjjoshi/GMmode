@@ -16,7 +16,8 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 
 ## What's in it
 
-- **Scoreboard of Chaos**: every league or just one, today or any date, filtered by Live, Upcoming or Final. Sort by "most chaotic" or "most takes". Live games refresh every 30s, and a score bumps when it changes.
+- **Scoreboard of Chaos**: every league or just one, today or any date, filtered by Live, Upcoming or Final, plus team search (press `/`). Every chip shows how many games you'll get. Filters live in the URL (e.g. `#/?league=nfl&status=in`), so filtered views can be shared, and a fresh visit always starts on everything. Sort by "most chaotic" or "most takes". Live games refresh every 30s, and a score bumps when it changes.
+- **Game of the Night**: a spotlight on the hottest live game (or the next one up), with live counters across the top of Scores.
 - **Vibe badges and jokes**: NAIL-BITER, BLOWOUT, FUNERAL, UPSET ALERT, BONUS SPORTS (overtime), SNOOZEFEST, FIREWORKS. They're based on score margin, time left, team records and the sport (see `lib/humor.js`).
 - **Chaos meter** (0–100): how close the game is, weighted by how late it is, plus bonuses for overtime and upsets.
 - **Game page**: the intern's commentary, the Panic Graph (win probability), the line score, team stats side by side, top performers and key plays.
@@ -27,6 +28,8 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - **Hall of Takes**: the hottest takes ever, Take Masters, Prophets and the Clown Corner.
 - **Anonymous identity**: a random funny name and an avatar, which you can change any time.
 - **🔴 Live Rooms** (`#/live`): the Twitch-style second screen. There's no video (TV rights), so the stage is a live scoreboard with down-and-distance, last play and win %. You get chat with slow mode and muting, reaction bursts across the stage, a hype meter, and big TOUCHDOWN/GOAL flashes. An Intern bot calls scores and lead changes. **The Call** ("who scores next?", or "who leads after the quarter?" for basketball) pays points, with a bonus for picks the crowd got wrong. Picks must be in 45s early, so nobody can snipe.
+- **🧪 Demo crowd**: a "Simulate a crowd" button in any live room adds 26 simulated fans who chat about the real game, react and make calls. Every simulated message and caller is tagged **SIM**, and they're counted separately from real viewers. It's for demos, so a room can be shown before it has real traffic.
+- **✨ Tour** (`#/tour`): a "what we've built" page with live previews of every feature, the roadmap and the open decisions. Good for showing the project to someone new.
 - **🧑‍🌾 Fantasy** (`#/fantasy`): connect a Sleeper username to see your live matchup, both lineups (with 🔴 LIVE links to the room for each player's game), the Fantasy Therapist, bench regret, standings, every matchup around the league and a league trash-talk thread. Your starters are flagged on NFL game cards and in live rooms. ESPN and Yahoo are on the roadmap.
 
 ## How it works
@@ -37,7 +40,7 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - `lib/store.js`: takes, polls, reactions and results, stored in `data/db.json`.
 - `lib/live.js`: Live Rooms over Server-Sent Events. Polls ESPN every 10s only while someone is watching. Room state is kept in memory.
 - `lib/fantasy.js`: the Sleeper API, plus a slimmed player directory cached in `data/` for a day.
-- `public/`: the frontend, written in vanilla JS with no build step. `app.js` handles scores, games and the Hall, `live.js` the live rooms, and `fantasy.js` fantasy.
+- `public/`: the frontend, written in vanilla JS with no build step. `app.js` handles scores, games and the Hall, `live.js` the live rooms, `fantasy.js` fantasy, and `tour.js` the tour page.
 
 ## Before putting it on the internet
 
