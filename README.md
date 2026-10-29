@@ -28,6 +28,16 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - **Hall of Takes**: the hottest takes ever, Take Masters, Prophets and the Clown Corner.
 - **Anonymous identity**: a random funny name and an avatar, which you can change any time.
 - **🔴 Live Rooms** (`#/live`): the Twitch-style second screen. There's no video (TV rights), so the stage is a live scoreboard with down-and-distance, last play and win %. You get chat with slow mode and muting, reaction bursts across the stage, a hype meter, and big TOUCHDOWN/GOAL flashes. An Intern bot calls scores and lead changes. **The Call** ("who scores next?", or "who leads after the quarter?" for basketball) pays points, with a bonus for picks the crowd got wrong. Picks must be in 45s early, so nobody can snipe.
+- **🏟️ Live field, per sport**: every live room draws the game as it happens.
+  - 🏈 **Football:** the ball, line of scrimmage, first-down line, chains and drive. They slide as the chains move, and red-zone drives pulse.
+  - 🏀 **Basketball:** a live shot chart (made ● / missed ✕) and a tip-off countdown.
+  - ⚾ **Baseball:** a diamond with runners on base, balls/strikes/outs, batter vs pitcher and the pitch sequence.
+  - 🏒 **Hockey:** a rink shot map with goals and shots on goal.
+  - ⚽ **Soccer:** a pitch with possession and a timeline of goals and cards.
+- **📋 Play-by-play you can follow**: a live feed with SCORE / TURNOVER / 3PT / HR / GOAL badges. Tap a play to see it on the field (the yardage arrow, or the shot itself). "Follow live" tracks the newest play.
+- **🎬 Sport-specific moments**: big-screen overlays and Intern posts for TIP-OFF, KICKOFF, FIRST PITCH, PUCK DROP, RED ZONE, TURNOVER, TWO-MINUTE WARNING, FROM DOWNTOWN, CLUTCH TIME, GONE! (home run), K, BASES LOADED, FULL COUNT, POWER PLAY, YELLOW/RED CARD and PENALTY.
+- **📊 Quick crowd polls**: they open automatically in the moment. "4th & 2: go for it, punt or kick?", "Bases loaded: strikeout, hit, grand slam or walk?", "Under 2:00, who closes it out?" Results update live, and the Intern announces the crowd's verdict.
+- **📣 Hype Battle**: a tug-of-war between the two fan bases. Tap HYPE for your team and the meter moves toward them, then drifts back when the noise dies down.
 - **🧪 Demo crowd**: a "Simulate a crowd" button in any live room adds 26 simulated fans who chat about the real game, react and make calls. Every simulated message and caller is tagged **SIM**, and they're counted separately from real viewers. It's for demos, so a room can be shown before it has real traffic.
 - **✨ Tour** (`#/tour`): a "what we've built" page with live previews of every feature, the roadmap and the open decisions. Good for showing the project to someone new.
 - **🧑‍🌾 Fantasy** (`#/fantasy`): connect a Sleeper username to see your live matchup, both lineups (with 🔴 LIVE links to the room for each player's game), the Fantasy Therapist, bench regret, standings, every matchup around the league and a league trash-talk thread. Your starters are flagged on NFL game cards and in live rooms. ESPN and Yahoo are on the roadmap.
@@ -40,6 +50,7 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - `lib/store.js`: takes, polls, reactions and results, stored in `data/db.json`.
 - `lib/live.js`: Live Rooms over Server-Sent Events. Polls ESPN every 10s only while someone is watching. Room state is kept in memory.
 - `lib/fantasy.js`: the Sleeper API, plus a slimmed player directory cached in `data/` for a day.
+- `lib/field.js`: turns ESPN's raw feeds into a per-sport "field state" (ball spot, shot coordinates, runners, events) and a play-by-play feed. `public/field.js` draws it as SVG, built once and updated in place so things animate.
 - `public/`: the frontend, written in vanilla JS with no build step. `app.js` handles scores, games and the Hall, `live.js` the live rooms, `fantasy.js` fantasy, and `tour.js` the tour page.
 
 ## Before putting it on the internet

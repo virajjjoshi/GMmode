@@ -6,7 +6,7 @@ async function renderTour() {
   const app = $('#app');
   app.innerHTML = `
     <section class="tour-hero">
-      <div class="tour-kicker">v0.2 · built ${esc(new Date().toLocaleDateString([], { month: 'long', year: 'numeric' }))}</div>
+      <div class="tour-kicker">v0.3 · built ${esc(new Date().toLocaleDateString([], { month: 'long', year: 'numeric' }))}</div>
       <h1 class="tour-title">THE SECOND SCREEN<br>FOR <span class="hl">SPORTS FANS</span></h1>
       <p class="tour-sub">Keep the game on your TV. Trash Talk Live is the couch: live scores with a funny take on every game, Twitch-style live rooms, fantasy wired in, and prediction games for bragging rights.</p>
       <div class="stats tour-stats">
@@ -35,7 +35,7 @@ async function renderTour() {
       </article>
       <article class="tour-card" style="--tc:var(--hot)">
         <div class="tc-ico">🔴</div><h3>Live Rooms</h3>
-        <p>A Twitch-style room for every game: live tracker, chat, reaction bursts, a hype meter, and a bot that calls every score. No video (TV rights), so it's built as the second screen.</p>
+        <p>A Twitch-style room for every game: a live field drawn for each sport (the football chains move, basketball shot charts, a baseball diamond with runners), tappable play-by-play, a Hype Battle tug-of-war, quick polls like "4th down: go for it?", and big moments like TIP-OFF and RED ZONE.</p>
         <div class="tc-demo" id="tdLive"></div>
         <a class="tc-link" id="tdLiveLink" href="#/live">Open the live rooms →</a>
       </article>
@@ -78,7 +78,8 @@ async function renderTour() {
     <h2 class="tour-h2">Where it's going</h2>
     <ol class="timeline">
       <li class="done"><b>v0.1 · Scores + Community</b><span>10 leagues, vibe badges, chaos meter, threads, polls, reactions, Hall of Takes</span></li>
-      <li class="done now"><b>v0.2 · Live + Fantasy</b> <em>you are here</em><span>Live Rooms, The Call, intern bot, Sleeper fantasy, demo crowd</span></li>
+      <li class="done"><b>v0.2 · Live + Fantasy</b><span>Live Rooms, The Call, intern bot, Sleeper fantasy, demo crowd</span></li>
+      <li class="done now"><b>v0.3 · The Live Field</b> <em>you are here</em><span>A field for every sport, tappable play-by-play, sport-specific moments, crowd polls, Hype Battle</span></li>
       <li><b>Phase 2 · Launch-ready</b><span>Real accounts (Clerk), Postgres, moderation tools, hosting + domain, licensed data feed, terms &amp; privacy</span></li>
       <li><b>Phase 3 · Growth</b><span>Mobile app + push alerts, private league rooms, creator co-streams, Claude-written roasts, ESPN + Yahoo fantasy</span></li>
     </ol>

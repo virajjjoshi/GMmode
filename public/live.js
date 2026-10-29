@@ -6,13 +6,16 @@ const lv = {
   es: null, league: null, id: null, game: null, call: null, myPick: null, myPickAt: 0,
   leaders: [], viewers: 0, hype: 0, pending: {}, ownSent: {}, reactTimer: null, tab: 'chat',
   stuckToBottom: true, unseen: 0, lockMs: 45000, lockTimer: null, demo: 0,
+  tug: { home: 0, away: 0 }, tugPending: { home: 0, away: 0 }, tugTimer: null, mpoll: null, myVote: null, follow: true, tick: null,
 };
+const START_LABEL = { football: 'KICKOFF', basketball: 'TIP-OFF', baseball: 'FIRST PITCH', hockey: 'PUCK DROP', soccer: 'KICKOFF' };
+const KIND_BADGE = { score: 'SCORE', three: '3PT', turnover: 'TURNOVER', penalty: 'FLAG', k: 'K', homer: 'HR', goal: 'GOAL', sog: 'SHOT', miss: 'MISS', block: 'BLOCK', foul: 'FOUL', card: 'CARD', stop: 'TIMEOUT' };
 const LIVE_REACTS = ['🔥', '😂', '😱', '🙌', '💀', '🤡', '🐐', '🧂', '😭', '🚀'];
 const EMOTES = ['LETS GOOO', 'W', 'L', 'REFS??', 'Called it', 'Unreal', 'Fraud watch 🚨', 'Ice cold 🧊'];
 
 function leaveLive() {
   if (lv.es) { lv.es.close(); lv.es = null; }
-  clearInterval(lv.lockTimer);
+  clearInterval(lv.lockTimer); clearInterval(lv.tick);
   lv.league = lv.id = null;
 }
 
@@ -42,7 +45,9 @@ async function renderLiveLobby() {
 // ---------- room ----------
 function renderLive(league, id) {
   leaveLive();
-  Object.assign(lv, { league, id, game: null, call: null, myPick: null, leaders: [], pending: {}, ownSent: {}, tab: 'chat', stuckToBottom: true, unseen: 0 });
+  Object.assign(lv, { league, id, game: null, call: null, myPick: null, leaders: [], pending: {}, ownSent: {}, tab: 'chat', stuckToBottom: true, unseen: 0,
+    tug: { home: 0, away: 0 }, tugPending: { home: 0, away: 0 }, mpoll: null, myVote: null, follow: true });
+  FIELD.sel = null;
   const app = $('#app');
   app.innerHTML = `
     <div class="live-top"><a class="back" href="#/live">← All live rooms</a>
@@ -51,11 +56,13 @@ function renderLive(league, id) {
     <div class="live-wrap">
       <section class="stage-col">
         <div class="stage" id="stage"><div class="stage-loading">Finding our seats…</div></div>
+        <section class="tug" id="tug" aria-label="Hype battle"></section>
         <div class="stage-bar">
-          <div class="hype" title="Hype meter: how hard the room is reacting"><span>HYPE</span><div class="hype-bar"><i id="hypeFill"></i></div></div>
           <div class="live-reacts" id="liveReacts">${LIVE_REACTS.map((e) => `<button type="button" data-e="${e}" aria-label="React ${e}">${e}</button>`).join('')}</div>
         </div>
+        <section class="panel mpoll-panel" id="mpollPanel" hidden></section>
         <div class="stage-panels">
+          <section class="panel pbp-panel" id="pbpPanel"><h3>📋 Play-by-Play <small><label class="follow"><input type="checkbox" id="followTog" checked> Follow live</label></small></h3><ol class="pbp" id="pbp"></ol></section>
           <section class="panel" id="callPanel"><h3>🔮 The Call <small>bragging rights only</small></h3><div id="call"></div></section>
           <section class="panel" id="fzPanel" hidden><h3>🧑‍🌾 Your Fantasy Guys</h3><div id="fzLive"></div></section>
         </div>
@@ -106,10 +113,14 @@ function onLiveEvent(ev) {
       if (!ev.messages.length) systemNote('Welcome to the room. Be the first to say something unhinged.');
       ev.messages.forEach((msg) => appendMsg(msg, false));
       scrollChat(true);
-      paintStage(); paintCall(); paintCallers(); paintViewers();
+      lv.tug = ev.tug || { home: 0, away: 0 }; lv.mpoll = ev.mpoll || null; lv.myVote = ev.mpoll?.mine || null;
+      paintStage(); paintCall(); paintCallers(); paintViewers(); paintTug(); paintMpoll(); paintPlays();
       break;
     case 'chat': appendMsg(ev.msg, true); break;
-    case 'game': lv.game = ev.game; paintStage(); paintCall(); break;
+    case 'game': lv.game = ev.game; paintStage(); paintCall(); paintPlays(); paintTug(); break;
+    case 'tug': lv.tug = { home: ev.home + lv.tugPending.home, away: ev.away + lv.tugPending.away }; paintTug(); break;
+    case 'mpoll': if (ev.poll?.id !== lv.mpoll?.id) lv.myVote = null; lv.mpoll = ev.poll; paintMpoll(); break;
+    case 'moment': showMoment(ev); break;
     case 'viewers': lv.viewers = ev.viewers; lv.demo = ev.demo || 0; paintViewers(); paintStageDemo(); break;
     case 'burst': onBurst(ev); break;
     case 'call':
@@ -122,43 +133,165 @@ function onLiveEvent(ev) {
 }
 
 // ---------- stage ----------
+// The shell is built once per room so the field SVG survives updates and can animate.
 function paintStage() {
   const g = lv.game, el = $('#stage');
   if (!el) return;
   if (!g) { el.innerHTML = '<div class="stage-loading">The scoreboard is buffering. Unlike your excuses.</div>'; return; }
+  if (!$('#stTop', el)) {
+    el.innerHTML = `<div class="stage-top" id="stTop"></div><div class="st-row" id="stScore"></div>
+      <div class="field-host" id="fieldHost"></div><div class="pre-over" id="preOver" hidden></div>
+      <div class="lower-third" id="stLower" hidden></div>
+      <div class="burst-layer" id="burst"></div><div class="score-flash" id="flash"></div><div class="moment-fx" id="momentFx"></div>`;
+  }
   const { a, h } = sideColors(g);
   el.style.setProperty('--away-c', a); el.style.setProperty('--home-c', h);
   const st = g.status.state;
-  const wp = g.winProb?.length ? g.winProb[g.winProb.length - 1] : null;
-  const wpTxt = wp == null ? '' : wp >= 50 ? `${esc(g.home.abbr)} ${Math.round(wp)}% to win` : `${esc(g.away.abbr)} ${Math.round(100 - wp)}% to win`;
-  const team = (t) => `<div class="st-team">${logo(t)}<div class="st-name nm-full">${esc(t?.name)}</div><div class="st-name nm-abbr">${esc(t?.abbr)}</div><div class="st-rec">${esc(t?.record || '')}</div></div>`;
-  el.innerHTML = `
-    <div class="stage-top">
-      ${st === 'in' ? '<span class="live-pill"><span class="dot"></span>LIVE</span>' : st === 'post' ? '<span class="live-pill off">FINAL</span>' : '<span class="live-pill off">SOON</span>'}
-      <span>${g.emoji} ${esc(g.leagueLabel)}</span>
-      ${g.broadcast ? `<span class="tv">📺 Watch on ${esc(g.broadcast)}</span>` : ''}
-    </div>
-    <div class="stage-score">
-      ${team(g.away)}
-      <div class="st-mid">
-        <div class="st-nums"><span data-side="away">${st === 'pre' ? '' : esc(g.away?.score ?? 0)}</span><i>${st === 'pre' ? 'VS' : '–'}</i><span data-side="home">${st === 'pre' ? '' : esc(g.home?.score ?? 0)}</span></div>
-        <div class="st-clock">${esc(st === 'pre' ? new Date(lv.game.date || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.status.detail)}</div>
-        ${g.situation && st === 'in' ? `<div class="st-sit">${esc(g.situation)}</div>` : ''}
-        ${wpTxt ? `<div class="st-wp">${wpTxt}</div>` : ''}
-      </div>
-      ${team(g.home)}
-    </div>
-    ${g.lastPlay ? `<div class="lower-third"><b>LAST PLAY</b><span>${esc(g.lastPlay)}</span></div>` : ''}
-    <div class="burst-layer" id="burst"></div>
-    <div class="score-flash" id="flash"></div>`;
+  el.dataset.sport = g.sport;
+  $('#stTop', el).innerHTML = `
+    ${st === 'in' ? '<span class="live-pill"><span class="dot"></span>LIVE</span>' : st === 'post' ? '<span class="live-pill off">FINAL</span>' : '<span class="live-pill off">SOON</span>'}
+    <span>${g.emoji} ${esc(g.leagueLabel)}</span>
+    ${g.broadcast ? `<span class="tv">📺 Watch on ${esc(g.broadcast)}</span>` : ''}`;
   paintStageDemo();
+  const wp = g.winProb?.length ? g.winProb[g.winProb.length - 1] : null;
+  const wpTxt = wp == null || st !== 'in' ? '' : wp >= 50 ? `${esc(g.home.abbr)} ${Math.round(wp)}% to win` : `${esc(g.away.abbr)} ${Math.round(100 - wp)}% to win`;
+  const poss = g.detail?.kind === 'football' && st === 'in' ? g.detail.possession : null;
+  const side = (t, s) => `<div class="st-t ${s}">${logo(t)}<div class="st-nm"><b class="nm-full">${esc(t?.name)}</b><b class="nm-abbr">${esc(t?.abbr)}</b><small>${esc(t?.record || '')}${poss === s ? ' <span class="poss" title="Has the ball">🏈</span>' : ''}</small></div>
+    <span class="st-num" data-side="${s}">${st === 'pre' ? '' : esc(t?.score ?? 0)}</span></div>`;
+  $('#stScore', el).innerHTML = `${side(g.away, 'away')}
+    <div class="st-mid"><div class="st-clock">${esc(st === 'pre' ? new Date(g.date || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.status.detail)}</div>${wpTxt ? `<div class="st-wp">${wpTxt}</div>` : ''}</div>
+    ${side(g.home, 'home')}`;
+  paintField($('#fieldHost', el), g);
+  const last = g.detail?.plays?.[0]?.text || g.lastPlay;
+  const lower = $('#stLower', el);
+  lower.hidden = !last;
+  if (last) lower.innerHTML = `<b>${st === 'post' ? 'FINAL PLAY' : 'LAST PLAY'}</b><span>${esc(last)}</span>`;
+  // Pre-game countdown over the field.
+  const pre = $('#preOver', el);
+  pre.hidden = st !== 'pre';
+  if (st === 'pre') {
+    const tickFn = () => {
+      const ms = new Date(g.date) - Date.now();
+      const t = ms <= 0 ? 'any second now' : `${Math.floor(ms / 3600e3)}:${String(Math.floor(ms / 60e3) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1e3) % 60).padStart(2, '0')}`;
+      pre.innerHTML = `<div class="pre-k">${START_LABEL[g.sport] || 'START'} IN</div><div class="pre-t">${esc(t)}</div><div class="pre-s">The room fills up at ${START_LABEL[g.sport]?.toLowerCase() || 'start'}. Get your calls ready.</div>`;
+    };
+    tickFn(); clearInterval(lv.tick); lv.tick = setInterval(tickFn, 1000);
+  } else clearInterval(lv.tick);
+}
+
+// ---------- moments: sport-specific big-screen overlays ----------
+const MOMENT_ICON = { start: { football: '🏈', basketball: '🏀', baseball: '⚾', hockey: '🏒', soccer: '⚽' }, redzone: '🚨', turnover: '🔄', twomin: '⏱️',
+  three: '🎯', half: '⏸️', clutch: '🧊', homer: '💣', k: 'K', full: '⚾', loaded: '🔥', pp: '⚠️', yellow: '🟨', red: '🟥', pen: '🎯' };
+function showMoment(ev) {
+  const g = lv.game, fx = $('#momentFx'); if (!fx || !g) return;
+  const ic = ev.kind === 'start' ? MOMENT_ICON.start[g.sport] : MOMENT_ICON[ev.kind] || '✨';
+  fx.style.setProperty('--c', ev.side ? sideColors(g)[ev.side === 'home' ? 'h' : 'a'] : '#ffd23f');
+  fx.className = `moment-fx k-${ev.kind}`;
+  fx.innerHTML = `<div class="mf-ic">${esc(ic)}</div><div class="mf-t">${esc(ev.title)}</div>${ev.sub ? `<div class="mf-s">${esc(ev.sub)}</div>` : ''}`;
+  void fx.offsetWidth; fx.classList.add('go');
+  if (['homer', 'turnover', 'start', 'loaded', 'red'].includes(ev.kind)) confetti(120, [fx.style.getPropertyValue('--c') || '#ffd23f', '#ffffff', '#ffd23f']);
+}
+
+// ---------- hype tug-of-war ----------
+function paintTug() {
+  const el = $('#tug'), g = lv.game; if (!el || !g) return;
+  const { home, away } = lv.tug;
+  const homeShare = (home + 1.5) / (home + away + 3);
+  const knob = Math.round(homeShare * 1000) / 10;
+  const lead = knob > 56 ? 'home' : knob < 44 ? 'away' : null;
+  const { a, h } = sideColors(g);
+  if (!$('.tug-track', el)) {
+    el.innerHTML = `<div class="tug-head"><b>📣 HYPE BATTLE</b><span>Who's got the juice? Tap your team. The meter goes to the loudest fans.</span></div>
+      <div class="tug-row">
+        <button type="button" class="tug-btn" data-hype="away" style="--c:${a}">${logo(g.away)}<span>HYPE<b>${esc(g.away?.abbr)}</b></span></button>
+        <div class="tug-track"><i class="tug-fill"></i><span class="tug-mid"></span><span class="tug-knob">🔥</span></div>
+        <button type="button" class="tug-btn" data-hype="home" style="--c:${h}"><span>HYPE<b>${esc(g.home?.abbr)}</b></span>${logo(g.home)}</button>
+      </div><div class="tug-label" id="tugLabel"></div>`;
+    el.onclick = (e) => {
+      const b = e.target.closest('[data-hype]'); if (!b) return;
+      const sd = b.dataset.hype;
+      lv.tug[sd] += 1; lv.tugPending[sd] += 1; paintTug();
+      b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+      stageFloat(sd === 'home' ? '📣' : '📣');
+      clearTimeout(lv.tugTimer);
+      lv.tugTimer = setTimeout(() => {
+        for (const s2 of ['home', 'away']) {
+          const n = lv.tugPending[s2]; if (!n) continue;
+          lv.tugPending[s2] = 0;
+          api(`/live/${lv.league}/${lv.id}/hype`, { method: 'POST', body: { side: s2, n } }).catch((err) => toast(err.message, true));
+        }
+      }, 350);
+    };
+  }
+  const fill = $('.tug-fill', el), kn = $('.tug-knob', el);
+  kn.style.left = `${knob}%`;
+  if (knob >= 50) { fill.style.left = '50%'; fill.style.width = `${knob - 50}%`; fill.style.background = h; }
+  else { fill.style.left = `${knob}%`; fill.style.width = `${50 - knob}%`; fill.style.background = a; }
+  const loud = home + away;
+  kn.textContent = loud > 60 ? '🔥' : loud > 15 ? '📣' : '🎙️';
+  el.classList.toggle('hot', loud > 60);
+  $('#tugLabel').innerHTML = lead
+    ? `<i class="tdot" style="background:${lead === 'home' ? h : a}"></i><b>${esc(g[lead]?.name)}</b> fans are LOUDER · ${Math.round(lead === 'home' ? knob : 100 - knob)}% of the noise`
+    : loud > 3 ? 'Dead even. Somebody make some noise.' : 'Quiet in here. Be the first to hype your team.';
+}
+
+// ---------- moment polls ----------
+function paintMpoll() {
+  const el = $('#mpollPanel'); if (!el) return;
+  const p = lv.mpoll;
+  el.hidden = !p;
+  if (!p) return;
+  const tot = Object.values(p.counts).reduce((x, y) => x + y, 0);
+  el.innerHTML = `<div class="mp-head"><span class="mp-live"><span class="dot"></span>RIGHT NOW</span><b>${esc(p.q)}</b></div>
+    <div class="mp-opts">${p.options.map((o) => {
+      const pc = tot ? Math.round(((p.counts[o.key] || 0) / tot) * 100) : 0;
+      return `<button type="button" class="mp-opt ${lv.myVote === o.key ? 'mine' : ''}" data-opt="${esc(o.key)}"><i style="width:${lv.myVote ? pc : 0}%"></i><span>${esc(o.label)}</span>${lv.myVote ? `<b>${pc}%</b>` : ''}</button>`;
+    }).join('')}</div>
+    <div class="mp-note">${lv.myVote ? `${tot} vote${tot === 1 ? '' : 's'} · results update live` : 'Quick! Vote before the play happens.'}</div>`;
+  el.onclick = async (e) => {
+    const b = e.target.closest('[data-opt]'); if (!b || !lv.mpoll) return;
+    try {
+      const r = await api(`/live/${lv.league}/${lv.id}/mpoll`, { method: 'POST', body: { pollId: lv.mpoll.id, option: b.dataset.opt } });
+      lv.myVote = r.mine; lv.mpoll = { ...lv.mpoll, counts: r.counts }; paintMpoll();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+// ---------- play-by-play ----------
+function paintPlays() {
+  const el = $('#pbp'), g = lv.game; if (!el || !g) return;
+  const plays = g.detail?.plays || [];
+  if (lv.follow && plays[0] && g.status.state === 'in' && FIELD.sel !== plays[0].id) highlightPlay($('#fieldHost'), g, plays[0]);
+  if (!plays.length) { el.innerHTML = `<li class="muted pbp-empty">${g.status.state === 'pre' ? `Plays show up here from ${START_LABEL[g.sport]?.toLowerCase() || 'the start'}.` : 'Waiting on the play feed…'}</li>`; return; }
+  const per = (p) => (!p.period || g.sport === 'baseball' || g.sport === 'soccer' ? '' : `${g.sport === 'hockey' ? 'P' : 'Q'}${p.period}`);
+  el.innerHTML = plays.map((p) => {
+    const c = p.side ? sideColors(g)[p.side === 'home' ? 'h' : 'a'] : 'var(--line)';
+    const badge = KIND_BADGE[p.kind];
+    const canShow = (p.fromX != null) || p.shot;
+    return `<li class="pbp-i k-${esc(p.kind)} ${FIELD.sel === p.id ? 'sel' : ''} ${canShow ? 'can' : ''}" data-id="${esc(p.id)}" style="--c:${c}">
+      <span class="pbp-when">${esc(per(p))} ${esc(p.clock)}</span>
+      <span class="pbp-txt">${p.side ? `<b>${esc(g[p.side]?.abbr)}</b> ` : ''}${esc(p.text)}${p.down ? ` <small class="muted">(${esc(p.down)})</small>` : ''}</span>
+      ${badge ? `<span class="pbp-b">${badge}</span>` : canShow ? '<span class="pbp-see">👁</span>' : ''}</li>`;
+  }).join('');
+}
+
+function wirePlays() {
+  $('#followTog').onchange = (e) => { lv.follow = e.target.checked; if (lv.follow) { FIELD.sel = null; paintPlays(); } };
+  $('#pbp').onclick = (e) => {
+    const li = e.target.closest('.pbp-i'); if (!li || !lv.game) return;
+    const play = lv.game.detail?.plays?.find((p) => p.id === li.dataset.id); if (!play) return;
+    lv.follow = false; $('#followTog').checked = false;
+    highlightPlay($('#fieldHost'), lv.game, play);
+    paintPlays();
+    $('#stage').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 }
 
 function scoreFlash(ev) {
   const g = lv.game; if (!g) return;
   for (const side of ['home', 'away']) {
     const d = ev[side]; if (!(d > 0)) continue;
-    const num = $(`.st-nums [data-side="${side}"]`); num && (num.classList.remove('bump'), void num.offsetWidth, num.classList.add('bump'));
+    const num = $(`.st-num[data-side="${side}"]`); num && (num.classList.remove('bump'), void num.offsetWidth, num.classList.add('bump'));
     if (g.sport === 'basketball') continue; // buckets are too frequent to celebrate each
     const word = g.sport === 'football' ? (d >= 6 ? 'TOUCHDOWN' : d === 3 ? 'FIELD GOAL' : d === 2 ? 'SAFETY!' : null)
       : g.sport === 'baseball' ? (d > 1 ? `${d} RUNS!` : 'RUN SCORES') : 'GOAL!';
@@ -186,9 +319,6 @@ function onBurst(ev) {
     for (let i = 0; i < Math.min(others, 25); i++) setTimeout(() => stageFloat(e), i * 60);
   }
   if (Object.keys(ev.counts || {}).length) lv.ownSent = {};
-  lv.hype = ev.hype ?? lv.hype;
-  const fill = $('#hypeFill');
-  if (fill) { fill.style.width = `${lv.hype}%`; fill.parentElement.parentElement.classList.toggle('maxed', lv.hype >= 80); }
 }
 async function flushLiveReacts() {
   const pending = lv.pending; lv.pending = {};
@@ -278,6 +408,7 @@ async function sendChat(text) {
 }
 
 function wireLive() {
+  wirePlays();
   $('#demoBtn').onclick = async () => {
     try {
       const r = await api(`/live/${lv.league}/${lv.id}/demo`, { method: 'POST', body: { on: !lv.demo } });

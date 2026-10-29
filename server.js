@@ -179,6 +179,8 @@ async function api(req, res, url) {
       }
       if (sub === 'react') { live.react(league, id, body.emoji, Number(body.n) || 1); return send(res, 200, { ok: true }); }
       if (sub === 'demo') return send(res, 200, live.setDemo(league, id, !!body.on));
+      if (sub === 'hype') { live.hype(league, id, body.side, Number(body.n) || 1); return send(res, 200, { ok: true }); }
+      if (sub === 'mpoll') return send(res, 200, live.votePoll(league, id, { uid: me, pollId: clean(body.pollId, 64), option: clean(body.option, 16) }));
       if (sub === 'call') {
         if (!['home', 'away'].includes(body.side)) throw bad('Pick a side.');
         return send(res, 200, live.makeCall(league, id, { uid: me, name, avatar, side: body.side, callId: clean(body.callId, 64) }));
