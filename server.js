@@ -14,6 +14,7 @@ const store = require('./lib/store');
 const humor = require('./lib/humor');
 const live = require('./lib/live');
 const fantasy = require('./lib/fantasy');
+const predict = require('./lib/predict');
 
 const PORT = Number(process.env.PORT) || 4321;
 const PUBLIC = path.join(__dirname, 'public');
@@ -220,6 +221,11 @@ async function api(req, res, url) {
     }
   }
 
+  // ----- Prediction Leagues -----
+  if (parts[0] === 'pl') {
+    return predict.handle({ req, res, url, parts: parts.slice(1), me, ip, send, readBody, HttpError, clean, limit });
+  }
+
   if (method === 'GET' && parts[0] === 'hall') return send(res, 200, store.hall());
 
   throw new HttpError(404, 'Nothing here but tumbleweeds.');
@@ -263,4 +269,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n  🏟️  Trash Talk Live is up at http://localhost:${PORT}\n`);
+  predict.start();
 });

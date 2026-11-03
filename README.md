@@ -42,6 +42,24 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - **✨ Tour** (`#/tour`): a "what we've built" page with live previews of every feature, the roadmap and the open decisions. Good for showing the project to someone new.
 - **🧑‍🌾 Fantasy** (`#/fantasy`): connect a Sleeper username to see your live matchup, both lineups (with 🔴 LIVE links to the room for each player's game), the Fantasy Therapist, bench regret, standings, every matchup around the league and a league trash-talk thread. Your starters are flagged on NFL game cards and in live rooms. ESPN and Yahoo are on the roadmap.
 
+- **🎯 Prediction Leagues** (`#/predict`, between Fantasy and Hall of Takes): create or join pick'em leagues across any of the 10 leagues above, pick game winners, and compete on weekly leaderboards and season standings. More below.
+
+## Prediction Leagues
+
+- **Leagues**: public (listed in Discover) or private (invite code or link). Pick the sports, season dates and max members. The format is weekly rounds plus season standings, or season-long only. Advanced rules: every game counts or pick-your-games, what happens to missed picks, how standings ties work, whether picks can be changed, when others can see your picks, late joins, and who can invite.
+- **Owners** can edit settings (sports, dates, format and scoring lock once the season starts), make, regenerate or turn off invites (with optional expiry and max uses), remove members, and archive the league.
+- **Picks**: tap a team to make a draft. Drafts are kept on the device and clearly marked "Not submitted". You review them, then submit. Every pick is checked on the server against the provider's current game status and the scheduled start, so deadlines can't be bypassed from the browser. Soccer gets a Draw option.
+- **Scoring**: Classic pick'em (1 point per correct winner). Canceled games aren't scored, postponed games count when actually played, and a tie in a sport without draws is a push. Standings are calculated from picks plus results every time they're shown, never stored as totals, so re-processing can't double-count, and a corrected result fixes every table. Every result change is logged in `resultLog`. Confidence scoring is modeled but not offered yet.
+- **ESPN win probability**: ESPN's own pregame "Matchup Predictor", from the same public ESPN feed as the scores. It's matched to teams by ESPN team ID and stored with a timestamp. It's published for NFL, NCAAF, NBA, WNBA and MLB (checked Oct 2026), not for NHL, college basketball or soccer, which show "ESPN win probability unavailable". It never affects scoring, and sportsbook odds are never shown as ESPN data. Set `ESPN_WIN_PROB=off` to hide it.
+- **Stats**: a personal record across all leagues (`#/predict/me`): by sport, by week, and streaks. League standings, which include misses, are shown separately.
+
+Code: `lib/predict/` (`service.js` holds the rules, `scoring.js` the pure scoring, `sports.js` the sport differences, `source.js` the data-provider boundary, `routes.js` the `/api/pl/*` endpoints, `persist.js` the storage and migrations) and `public/predict.js`. Data lives in `data/predictions.json` (override with `PL_DATA_FILE`). Results refresh every 2 minutes for leagues in play (`PL_SYNC_MS`).
+
+```bash
+npm test         # business-rule tests (node:test, no dependencies)
+npm run check    # syntax-check every JS file
+```
+
 ## How it works
 
 - `server.js`: a plain Node HTTP server with the JSON API and static files.
@@ -59,4 +77,5 @@ There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx`
 - Move from the JSON file to Postgres or SQLite once there's real traffic.
 - Rate limits, live chat and calls are kept in memory, so a restart clears live rooms. Running more than one instance needs Redis pub/sub (see the roadmap).
 - Live room streams pass the fan ID in the URL (EventSource can't send headers). That's fine for anonymous IDs, but switch to cookie auth when real accounts arrive.
-- ESPN's API is unofficial and undocumented. For a commercial launch, switch to a licensed data feed.
+- ESPN's API is unofficial and undocumented. For a commercial launch, switch to a licensed data feed. Prediction Leagues already goes through one adapter (`lib/predict/source.js`), so a licensed feed only means writing one new file. Win probabilities need a provider that actually licenses ESPN's numbers, or a relabel to that provider's own model.
+- Prediction Leagues trusts the same anonymous fan ID as everything else. Anyone who copies someone's ID from their browser can act as them, including a league owner. Real accounts fix that.

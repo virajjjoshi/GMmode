@@ -176,16 +176,20 @@ async function loadTicker() {
 function route() {
   clearTimers();
   const h = location.hash.replace(/^#\/?/, '');
-  const [view, a, b] = h.split('?')[0].split('/');
+  const [view, a, b, c, d] = h.split('?')[0].split('/');
   if (typeof leaveLive === 'function') leaveLive();
-  const nav = ['hall', 'fantasy', 'live', 'tour'].includes(view) ? view : 'scores';
-  $$('.nav a').forEach((el) => el.classList.toggle('active', el.dataset.nav === nav));
+  const nav = ['hall', 'fantasy', 'predict', 'live', 'tour'].includes(view) ? view : 'scores';
+  $$('.nav a').forEach((el) => {
+    el.classList.toggle('active', el.dataset.nav === nav);
+    if (el.dataset.nav === nav) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+  });
   document.body.dataset.view = view || 'scores';
   window.scrollTo(0, 0);
   if (view === 'game' && a && b) return renderGame(a, b);
   if (view === 'live' && a && b) return renderLive(a, b);
   if (view === 'live') return renderLiveLobby();
   if (view === 'fantasy') return renderFantasy();
+  if (view === 'predict') return renderPredict(a, b, c, d);
   if (view === 'tour') return renderTour();
   if (view === 'hall') return renderHall();
   return renderScores();
