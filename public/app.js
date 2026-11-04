@@ -178,7 +178,7 @@ function route() {
   const h = location.hash.replace(/^#\/?/, '');
   const [view, a, b, c, d] = h.split('?')[0].split('/');
   if (typeof leaveLive === 'function') leaveLive();
-  const nav = ['hall', 'fantasy', 'predict', 'live', 'tour'].includes(view) ? view : 'scores';
+  const nav = ['hall', 'fantasy', 'predict', 'bets', 'live', 'tour'].includes(view) ? view : 'scores';
   $$('.nav a').forEach((el) => {
     el.classList.toggle('active', el.dataset.nav === nav);
     if (el.dataset.nav === nav) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
@@ -190,6 +190,7 @@ function route() {
   if (view === 'live') return renderLiveLobby();
   if (view === 'fantasy') return renderFantasy();
   if (view === 'predict') return renderPredict(a, b, c, d);
+  if (view === 'bets') return renderBets(a);
   if (view === 'tour') return renderTour();
   if (view === 'hall') return renderHall();
   return renderScores();
@@ -289,6 +290,7 @@ async function renderScores() {
   };
 
   loadFantasyMap().then(() => sb.games.length && paintGames(true));
+  loadBetAction().then(() => sb.games.length && bt.action && paintGames(true));
   api('/hall').then((h) => { sb.takes = h.totals.takes; paintSpotlight(); }).catch(() => {});
   await loadGames();
   every(async () => { if (sb.games.some((g) => g.status.state === 'in')) await loadGames(true); }, 30000);
@@ -474,6 +476,7 @@ function cardHTML(g) {
     <p class="vibe">${esc(g.vibe.line)}</p>
     ${st === 'pre' ? '' : `<div class="chaos" title="How unhinged this game is"><span>Chaos</span><div class="chaos-bar"><i style="width:${g.vibe.chaos}%"></i></div><span>${g.vibe.chaos}</span></div>`}
     ${fantasyChip(g)}
+    ${betChip(g)}
     <div class="card-foot"><span>💬 ${g.takeCount} take${g.takeCount === 1 ? '' : 's'} · ${pollTxt}</span>${liveNow
       ? `<span class="enter live-enter">🔴 ${g.viewers ? `${g.viewers} watching · ` : ''}Join live →</span>`
       : '<span class="enter">Enter the thread →</span>'}</div>
@@ -806,8 +809,9 @@ async function postTake(text, parentId, input, btn) {
 
 function takeHTML(c, replies = []) {
   const heat = { mild: '🌶 mild', spicy: '🌶🌶 spicy', nuclear: '☢️ NUCLEAR' }[c.heat] || '';
-  const tag = c.fire >= 3 && c.fire >= c.cap * 3 ? '<span class="ratio">🔥 VERIFIED HOT</span>'
-    : c.cap >= 3 && c.cap > c.fire * 2 ? '<span class="ratio clown">🤡 RATIO\'D</span>' : '';
+  const tag = (c.fire >= 3 && c.fire >= c.cap * 3 ? '<span class="ratio">🔥 VERIFIED HOT</span>'
+    : c.cap >= 3 && c.cap > c.fire * 2 ? '<span class="ratio clown">🤡 RATIO\'D</span>' : ''
+  ) + (c.receipt ? '<span class="ratio receipt" title="This fan shared a real bet on this game">💸 PUT MONEY ON IT</span>' : '');
   return `<article class="take ${esc(c.heat)}" data-id="${esc(c.id)}">
     <div class="av" aria-hidden="true">${esc(c.avatar || '🙂')}</div>
     <div class="take-body">

@@ -15,6 +15,14 @@ What we're building, in what order, and the decisions still open.
 | v0.2.1 | Filter fixes (state in the URL, live counts, clear button, team search), Game of the Night spotlight, Tour page, labeled demo crowd for live rooms |
 | **v0.3** | **Live field for every sport** (football field with ball, chains and drive; basketball shot chart; baseball diamond with count; hockey shot map; soccer pitch with timeline), tappable play-by-play, sport-specific moments (tip-off, red zone, home runs, power plays, cards...), automatic crowd polls (4th down, bases loaded, clutch time), Hype Battle tug-of-war |
 | v0.4 | **Prediction Leagues**: public and private pick'em leagues across all sports, invites, server-enforced deadlines, weekly and season standings, ESPN Matchup Predictor where ESPN publishes it, personal stats |
+| v0.5 | **💸 Bets**: link a sportsbook (SharpSports, plus a Demo Book), live Sweat Meter, parlay tracker with ONE LEG AWAY, your action on game cards and in live rooms, Tail or Fade, Bad Beat Hall of Fame, Bet Therapist, 💸 receipts on takes, 21+ gate |
+
+### Bets: next
+
+- [ ] Sign up for SharpSports and add the API keys (business account; pricing is by request). Then test with a real DraftKings / FanDuel account
+- [ ] SharpSports webhooks instead of syncing when the page opens
+- [ ] Player props and live in-game bets in the Sweat Meter (synced now, but shown with the book's grade only)
+- [ ] Check state rules and app-store policies before any sportsbook affiliate links (the money-making path)
 
 ### Prediction Leagues: next
 

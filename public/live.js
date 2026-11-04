@@ -65,6 +65,7 @@ function renderLive(league, id) {
           <section class="panel pbp-panel" id="pbpPanel"><h3>📋 Play-by-Play <small><label class="follow"><input type="checkbox" id="followTog" checked> Follow live</label></small></h3><ol class="pbp" id="pbp"></ol></section>
           <section class="panel" id="callPanel"><h3>🔮 The Call <small>bragging rights only</small></h3><div id="call"></div></section>
           <section class="panel" id="fzPanel" hidden><h3>🧑‍🌾 Your Fantasy Guys</h3><div id="fzLive"></div></section>
+          <section class="panel bt-panel" id="btPanel" hidden><h3>💸 Your Action <small>only you can see this</small></h3><div id="btLive"></div></section>
         </div>
       </section>
       <aside class="chat-col">
@@ -90,6 +91,7 @@ function renderLive(league, id) {
   wireLive();
   connectLive();
   paintFantasyLive();
+  paintBetsLive();
 }
 
 function connectLive() {

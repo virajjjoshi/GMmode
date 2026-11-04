@@ -60,6 +60,19 @@ npm test         # business-rule tests (node:test, no dependencies)
 npm run check    # syntax-check every JS file
 ```
 
+## 💸 Bets
+
+`#/bets`, 21+ only. Link a sportsbook and the app tracks your bets live. It's read-only: we never take, place, or hold bets, and bets are private unless you share one.
+
+- **Linking**: real accounts (DraftKings, FanDuel, BetMGM, Caesars and 30+ more) go through [SharpSports](https://docs.sharpsports.io), which works like Plaid for sportsbooks. The bettor logs in on SharpSports' page, so we never see a sportsbook password. Set `SHARPSPORTS_PUBLIC_KEY` and `SHARPSPORTS_PRIVATE_KEY` to switch it on. Until then the book buttons are disabled.
+- **Demo Book**: a clearly labelled pretend sportsbook so the section works today. Open bets are on today's real games at real pregame lines from ESPN (DraftKings via ESPN). Settled history uses real final scores with generated lines, including a couple of guaranteed bad beats. Tail or Fade and the Hall of Fame are seeded with a few simulated fans, tagged SIM.
+- **🫠 My Sweat**: record, net, ROI, open action, the Bet Therapist, and every bet with a live Sweat Meter (chance to cash), a light per parlay leg, and a 🚨 ONE LEG AWAY alert.
+- **Everywhere else**: game cards show your action on that game, live rooms get a "Your Action" panel (only you see either), and takes from someone who shared a bet on that game get a 💸 PUT MONEY ON IT badge.
+- **🗳️ Tail or Fade**: share a bet, the crowd votes. Fade scores show how betting against each sharer would have gone, and Crowd Callers ranks who votes right.
+- **🪦 Bad Beat Hall of Fame**: lost by the hook, or a 3+ leg parlay that died on one leg. Victims submit their own.
+
+Code: `lib/bets/` (`track.js` the pure live math and bad-beat rules, `demo.js` the Demo Book, `sharpsports.js` the real provider, `service.js` accounts/sharing/votes, `roast.js` the jokes, `index.js` the `/api/bets/*` routes) and `public/bets.js`. Data lives in `data/bets.json` (override with `BETS_DATA_FILE`). The Sweat Meter is a simple model (score margin vs. time left), not a betting model. ESPN drops lines once a game ends, so the server keeps a copy of each game's last pregame line.
+
 ## How it works
 
 - `server.js`: a plain Node HTTP server with the JSON API and static files.
