@@ -18,7 +18,7 @@ function plUntil(t) {
 const plRange = (w) => `${plDay(w.start)} – ${plDay(w.end - 1)}`;
 const plRank = (r, tied) => (r == null ? '–' : `${tied ? 'T-' : '#'}${r}`);
 const plAcc = (a) => (a == null ? '–' : `${a}%`);
-const plSports = (l) => l.sports.map((s) => `${s.emoji} ${esc(s.label)}`).join(' · ');
+const plSports = (l) => l.sports.map((s) => `${esc(s.label)}`).join(' · ');
 const pluralize = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 const PL_STATUS = { active: ['Active', 'live'], upcoming: ['Upcoming', 'pre'], completed: ['Completed', ''], archived: ['Archived', ''] };
@@ -26,10 +26,10 @@ const plStatusPill = (s) => `<span class="pl-pill ${PL_STATUS[s]?.[1] || ''}">${
 
 // Every pick state the server can report, plus the local-only "draft".
 const PICK_STATUS = {
-  needed: ['Pick needed', 'need'], open: ['Open', 'open'], draft: ['✏️ Not submitted', 'draft'], submitted: ['✓ Submitted', 'ok'],
-  locked: ['🔒 Locked', 'lock'], in_progress: ['🔴 In progress', 'live'], postponed: ['⏸ Postponed', 'lock'],
-  correct: ['✅ Correct', 'win'], incorrect: ['❌ Wrong', 'loss'], missed: ['⌛ Missed', 'loss'], push: ['➖ Push (tie)', 'lock'],
-  void: ['🚫 Void', 'lock'], closed: ['Final', 'lock'],
+  needed: ['Pick needed', 'need'], open: ['Open', 'open'], draft: ['Not submitted', 'draft'], submitted: ['✓ Submitted', 'ok'],
+  locked: ['Locked', 'lock'], in_progress: ['In progress', 'live'], postponed: ['Postponed', 'lock'],
+  correct: ['Correct', 'win'], incorrect: ['Wrong', 'loss'], missed: ['Missed', 'loss'], push: ['Push (tie)', 'lock'],
+  void: ['Void', 'lock'], closed: ['Final', 'lock'],
 };
 const plBadge = (s, extra = '') => { const [label, cls] = PICK_STATUS[s] || [s, '']; return `<span class="pl-status ${cls}">${label}${extra}</span>`; };
 const sideName = (g, side) => (side === 'draw' ? 'Draw' : g[side]?.name || g[side]?.abbr || side);
@@ -51,7 +51,7 @@ function plDialog({ title, html, ok = 'Confirm', danger = false }) {
   });
 }
 
-const plError = (e, retry = true) => `<div class="empty-state"><div class="big">🧯</div><p>${esc(e.message)}</p>${retry ? '<button class="btn primary" type="button" onclick="route()">Try again</button>' : ''} <a class="btn ghost" href="#/predict">Back to Prediction Leagues</a></div>`;
+const plError = (e, retry = true) => `<div class="empty-state"><p>${esc(e.message)}</p>${retry ? '<button class="btn primary" type="button" data-retry>Try again</button>' : ''} <a class="btn ghost" href="#/predict">Back to Prediction Leagues</a></div>`;
 
 // ---------- router ----------
 function renderPredict(a, b, c, d) {
@@ -73,8 +73,8 @@ async function renderPlHome() {
   const tab = PL_TABS.some(([k]) => k === q.get('tab')) ? q.get('tab') : 'overview';
   const app = $('#app');
   app.innerHTML = `
-    <h1 class="hero-title">PREDICTION <span class="hl">LEAGUES</span></h1>
-    <p class="hero-sub">Pick the winners. Beat your friends. Weekly glory, season-long bragging rights.</p>
+    <div class="page-head"><h1 class="hero-title">Pick’em Leagues</h1>
+    <p class="hero-sub">Pick the winners. Beat your friends. Weekly glory, season-long bragging rights.</p></div>
     <div class="pl-actions">
       <a class="btn primary" href="#/predict/new">＋ Create a league</a>
       <form class="pl-joinform" id="plJoin" autocomplete="off">
@@ -82,7 +82,7 @@ async function renderPlHome() {
         <button class="btn" type="submit">Join</button>
       </form>
       <span class="spacer"></span>
-      <a class="btn ghost" href="#/predict/me">📈 My prediction stats</a>
+      <a class="btn ghost" href="#/predict/me">My prediction stats</a>
     </div>
     <div id="plNext"></div>
     <div class="chips pl-tabs" role="tablist" aria-label="Prediction Leagues sections">${PL_TABS.map(([k, l]) => `<a class="chip" role="tab" href="#/predict?tab=${k}" aria-pressed="${k === tab}" aria-selected="${k === tab}" data-tab="${k}">${l}</a>`).join('')}</div>
@@ -112,11 +112,11 @@ function paintPlNext(d) {
   const due = d.deadlines.find((x) => x.picks === 'all' && x.needed) || null;
   if (due) {
     el.innerHTML = `<a class="pl-next hot" href="#/predict/l/${esc(due.leagueId)}/picks">
-      <span class="pl-next-ico">⏰</span>
+      <span class="pl-next-ico hot">!</span>
       <span><b>${pluralize(due.needed, 'pick')} needed in ${esc(due.avatar)} ${esc(due.leagueName)}</b><small>First one locks ${plUntil(due.at) ? `in ${plUntil(due.at)}` : 'now'} · ${esc(plWhen(due.at))}</small></span>
       <span class="btn primary">Make picks →</span></a>`;
   } else if (d.leagues.some((l) => l.status === 'active')) {
-    el.innerHTML = `<div class="pl-next"><span class="pl-next-ico">✅</span><span><b>You're all caught up.</b><small>No picks due right now. We'll show the next deadline here.</small></span></div>`;
+    el.innerHTML = `<div class="pl-next"><span class="pl-next-ico ok">✓</span><span><b>You're all caught up.</b><small>No picks due right now. We'll show the next deadline here.</small></span></div>`;
   } else el.innerHTML = '';
 }
 
@@ -128,7 +128,7 @@ function plCardHTML(c) {
     : (wk.open ? `<b>${wk.submitted}/${wk.open} open games picked</b>` : '<span class="muted">No open games in the next 7 days</span>');
   return `<a class="card pl-card" href="#/predict/l/${esc(c.id)}">
     <div class="card-top"><span>${plSports(c)}</span>${plStatusPill(c.status)}</div>
-    <div class="pl-card-head"><span class="pl-av">${esc(c.avatar)}</span><div><h3>${esc(c.name)}</h3><small class="muted">${c.visibility === 'public' ? '🌎 Public' : '🔒 Private'} · ${pluralize(c.members, 'member')}${c.me?.role === 'owner' ? ' · 👑 You run it' : ''}</small></div></div>
+    <div class="pl-card-head"><span class="pl-av">${esc(c.avatar)}</span><div><h3>${esc(c.name)}</h3><small class="muted">${c.visibility === 'public' ? 'Public' : 'Private'} · ${pluralize(c.members, 'member')}${c.me?.role === 'owner' ? ' · 👑 You run it' : ''}</small></div></div>
     <div class="pl-card-stats">
       <div><b>${plRank(c.rank, c.tied)}</b><span>rank of ${c.members}</span></div>
       <div><b>${c.points}</b><span>points</span></div>
@@ -140,10 +140,9 @@ function plCardHTML(c) {
 }
 
 function plEmptyLeagues() {
-  return `<div class="empty-state pl-empty"><div class="big">🎯</div>
-    <h2>No leagues yet</h2>
+  return `<div class="empty-state pl-empty"><h2>No leagues yet</h2>
     <p>Start one for your friends, family or office, join with an invite code, or find a public league to jump into.</p>
-    <div class="row" style="justify-content:center;flex-wrap:wrap"><a class="btn primary" href="#/predict/new">＋ Create a league</a><a class="btn" href="#/predict?tab=discover">🌎 Discover public leagues</a></div></div>`;
+    <div class="row" style="justify-content:center;flex-wrap:wrap"><a class="btn primary" href="#/predict/new">＋ Create a league</a><a class="btn" href="#/predict?tab=discover">Discover public leagues</a></div></div>`;
 }
 
 function paintPlOverview(d) {
@@ -162,10 +161,10 @@ function paintPlOverview(d) {
     <h2 class="league-head">Your leagues</h2>
     ${active.length ? `<div class="grid">${active.map(plCardHTML).join('')}</div>` : '<p class="muted">None active right now. Finished leagues are under <a href="#/predict?tab=mine">My leagues</a>.</p>'}
     <div class="pl-cols">
-      <section class="panel"><h3>⏰ Upcoming deadlines</h3>${d.deadlines.length ? `<ul class="pl-list">${d.deadlines.map((x) => `<li><a href="#/predict/l/${esc(x.leagueId)}/picks"><span>${esc(x.avatar)} <b>${esc(x.leagueName)}</b><small>${x.picks === 'all' ? `${pluralize(x.needed, 'pick')} needed` : `${pluralize(x.open, 'game')} open`}</small></span><span class="pl-when">${esc(plWhen(x.at))}<small>${plUntil(x.at) ? `in ${plUntil(x.at)}` : 'locking'}</small></span></a></li>`).join('')}</ul>` : '<p class="muted">Nothing due. Enjoy the calm.</p>'}</section>
-      <section class="panel"><h3>🗓️ Games open for picks</h3>${d.upcoming.length ? `<ul class="pl-list">${d.upcoming.map((g) => `<li><a href="#/predict/l/${esc(g.leagueId)}/picks"><span><b>${esc(g.away?.abbr)} @ ${esc(g.home?.abbr)}</b><small>${esc(g.leagueName)}</small></span><span class="pl-when">${esc(plWhen(g.start))}</span></a></li>`).join('')}</ul>` : '<p class="muted">No open games you haven\'t picked yet.</p>'}</section>
-      <section class="panel"><h3>📋 Recent results</h3>${d.recent.length ? `<ul class="pl-list">${d.recent.map((x) => `<li><a href="#/predict/l/${esc(x.leagueId)}/history"><span><b>${esc(x.game.away?.abbr)} @ ${esc(x.game.home?.abbr)}</b><small>${esc(x.leagueName)} · you: ${esc(x.pick ? sideName(x.game, x.pick) : 'no pick')}</small></span>${plBadge(x.status)}</a></li>`).join('')}</ul>` : '<p class="muted">Your graded picks show up here once games go final.</p>'}</section>
-      <section class="panel"><h3>📣 League activity</h3>${d.activity.length ? `<ul class="pl-feed">${d.activity.map((a) => `<li><span>${esc(a.text)}</span><small>${esc(a.leagueName)} · ${ago(a.at)}</small></li>`).join('')}</ul>` : '<p class="muted">Quiet so far.</p>'}</section>
+      <section class="panel"><h3>Upcoming deadlines</h3>${d.deadlines.length ? `<ul class="pl-list">${d.deadlines.map((x) => `<li><a href="#/predict/l/${esc(x.leagueId)}/picks"><span>${esc(x.avatar)} <b>${esc(x.leagueName)}</b><small>${x.picks === 'all' ? `${pluralize(x.needed, 'pick')} needed` : `${pluralize(x.open, 'game')} open`}</small></span><span class="pl-when">${esc(plWhen(x.at))}<small>${plUntil(x.at) ? `in ${plUntil(x.at)}` : 'locking'}</small></span></a></li>`).join('')}</ul>` : '<p class="muted">Nothing due. Enjoy the calm.</p>'}</section>
+      <section class="panel"><h3>Games open for picks</h3>${d.upcoming.length ? `<ul class="pl-list">${d.upcoming.map((g) => `<li><a href="#/predict/l/${esc(g.leagueId)}/picks"><span><b>${esc(g.away?.abbr)} @ ${esc(g.home?.abbr)}</b><small>${esc(g.leagueName)}</small></span><span class="pl-when">${esc(plWhen(g.start))}</span></a></li>`).join('')}</ul>` : '<p class="muted">No open games you haven\'t picked yet.</p>'}</section>
+      <section class="panel"><h3>Recent results</h3>${d.recent.length ? `<ul class="pl-list">${d.recent.map((x) => `<li><a href="#/predict/l/${esc(x.leagueId)}/history"><span><b>${esc(x.game.away?.abbr)} @ ${esc(x.game.home?.abbr)}</b><small>${esc(x.leagueName)} · you: ${esc(x.pick ? sideName(x.game, x.pick) : 'no pick')}</small></span>${plBadge(x.status)}</a></li>`).join('')}</ul>` : '<p class="muted">Your graded picks show up here once games go final.</p>'}</section>
+      <section class="panel"><h3>League activity</h3>${d.activity.length ? `<ul class="pl-feed">${d.activity.map((a) => `<li><span>${esc(a.text)}</span><small>${esc(a.leagueName)} · ${ago(a.at)}</small></li>`).join('')}</ul>` : '<p class="muted">Quiet so far.</p>'}</section>
     </div>`;
 }
 
@@ -178,9 +177,9 @@ function paintPlMine(d) {
     const list = d.leagues.filter((l) => (st === 'all' || l.status === st) && (vis === 'all' || l.visibility === vis));
     el.innerHTML = `<div class="controls pl-filters">
         <div class="chips" role="group" aria-label="League status">${MINE_FILTERS.map(([k, l]) => { const n = d.leagues.filter((x) => k === 'all' || x.status === k).length; return `<button class="chip ${n ? '' : 'empty'}" data-st="${k}" aria-pressed="${st === k}">${l} <span class="count">${n}</span></button>`; }).join('')}</div>
-        <div class="chips" role="group" aria-label="Visibility">${[['all', 'Public + private'], ['public', '🌎 Public'], ['private', '🔒 Private']].map(([k, l]) => `<button class="chip" data-vis="${k}" aria-pressed="${vis === k}">${l}</button>`).join('')}</div>
+        <div class="chips" role="group" aria-label="Visibility">${[['all', 'Public + private'], ['public', 'Public'], ['private', 'Private']].map(([k, l]) => `<button class="chip" data-vis="${k}" aria-pressed="${vis === k}">${l}</button>`).join('')}</div>
       </div>
-      ${list.length ? `<div class="grid">${list.map(plCardHTML).join('')}</div>` : '<div class="empty-state"><div class="big">🔍</div><p>No leagues match those filters.</p></div>'}`;
+      ${list.length ? `<div class="grid">${list.map(plCardHTML).join('')}</div>` : '<div class="empty-state"><p>No leagues match those filters.</p></div>'}`;
     el.querySelector('.pl-filters').onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.st) st = b.dataset.st; if (b.dataset.vis) vis = b.dataset.vis; draw();
@@ -195,10 +194,10 @@ function plPublicCard(l, action) {
     <div class="pl-card-head"><span class="pl-av">${esc(l.avatar)}</span><div><h3>${esc(l.name)}</h3><small class="muted">Run by ${esc(l.ownerName || 'someone')}</small></div></div>
     ${l.description ? `<p class="pl-desc">${esc(l.description)}</p>` : ''}
     <div class="pl-meta">
-      <span>👥 ${l.members}/${l.maxMembers} members</span>
-      <span>🏆 ${esc(l.formatLabel)}</span>
-      <span>🎯 ${esc(l.scoring)} · ${l.picks === 'all' ? 'every game' : 'pick your games'}</span>
-      <span>📅 ${esc(plDay(l.seasonStart))} – ${esc(plDay(l.seasonEnd - 1))} (${pluralize(l.weeks, 'week')})</span>
+      <span>${l.members}/${l.maxMembers} members</span>
+      <span>${esc(l.formatLabel)}</span>
+      <span>${esc(l.scoring)} · ${l.picks === 'all' ? 'every game' : 'pick your games'}</span>
+      <span>${esc(plDay(l.seasonStart))} – ${esc(plDay(l.seasonEnd - 1))} (${pluralize(l.weeks, 'week')})</span>
     </div>
     ${action}
   </article>`;
@@ -209,7 +208,7 @@ async function paintPlDiscover() {
   let d;
   try { d = await api('/pl/discover'); } catch (e) { el.innerHTML = plError(e); return; }
   if (!d.leagues.length) {
-    el.innerHTML = '<div class="empty-state"><div class="big">🌎</div><h2>No public leagues to join right now</h2><p>Be the first: make a public league and anyone can find it here.</p><a class="btn primary" href="#/predict/new">＋ Create a public league</a></div>';
+    el.innerHTML = '<div class="empty-state"><h2>No public leagues to join right now</h2><p>Be the first: make a public league and anyone can find it here.</p><a class="btn primary" href="#/predict/new">＋ Create a public league</a></div>';
     return;
   }
   el.innerHTML = `<p class="muted">Public leagues anyone can join. Members and picks stay private until you're in.</p>
@@ -234,7 +233,7 @@ const fromInput = (s) => { const [y, m, d] = s.split('-').map(Number); return ne
 
 async function renderPlCreate() {
   const app = $('#app');
-  app.innerHTML = '<a class="back" href="#/predict">← Prediction Leagues</a><div class="skeleton" style="height:420px"></div>';
+  app.innerHTML = '<a class="back" href="#/predict">← Pick’em</a><div class="skeleton" style="height:420px"></div>';
   let cfg;
   try { cfg = await plConfig(); } catch (e) { app.innerHTML = plError(e); return; }
   // Default: weeks start on the most recent Tuesday, so NFL Thu–Mon slates fit in one week.
@@ -242,18 +241,18 @@ async function renderPlCreate() {
   const end = new Date(start); end.setDate(end.getDate() + 18 * 7 - 1);
   const radio = (name, opts, val) => opts.map(([v, label, hint, disabled]) => `<label class="pl-opt ${disabled ? 'disabled' : ''}"><input type="radio" name="${name}" value="${v}" ${v === val ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ''}</span></label>`).join('');
   app.innerHTML = `
-    <a class="back" href="#/predict">← Prediction Leagues</a>
-    <h1 class="hero-title">CREATE A <span class="hl">LEAGUE</span></h1>
-    <p class="hero-sub">The defaults work for most groups. Name it, pick your sports, and invite people.</p>
+    <a class="back" href="#/predict">← Pick’em</a>
+    <div class="page-head"><h1 class="hero-title">Create a league</h1>
+    <p class="hero-sub">The defaults work for most groups. Name it, pick your sports, and invite people.</p></div>
     <form id="plCreate" class="pl-form" novalidate>
       <section class="panel"><h3>1 · The basics</h3>
         <label class="field"><span>League name</span><input name="leagueName" required minlength="3" maxlength="40" placeholder="The Office Pick'em" autocomplete="off"></label>
         <label class="field"><span>Description <small class="muted">optional</small></span><textarea name="description" maxlength="200" rows="2" placeholder="Loser buys wings."></textarea></label>
         <div class="field"><span>League badge</span><div class="avatar-pick" id="plAvatar">${PL_AVATARS.map((a, i) => `<button type="button" aria-pressed="${i === 0}" aria-label="Badge ${a}">${a}</button>`).join('')}</div></div>
-        <div class="field"><span>Who can join?</span><div class="pl-opts">${radio('visibility', [['private', '🔒 Private', 'Invite code or link only'], ['public', '🌎 Public', 'Listed in Discover. Anyone can join']], 'private')}</div></div>
+        <div class="field"><span>Who can join?</span><div class="pl-opts">${radio('visibility', [['private', 'Private', 'Invite code or link only'], ['public', 'Public', 'Listed in Discover. Anyone can join']], 'private')}</div></div>
       </section>
       <section class="panel"><h3>2 · Sports and season</h3>
-        <div class="field"><span>Sports <small class="muted">pick one or more</small></span><div class="chips" id="plSports">${cfg.competitions.map((c) => `<button type="button" class="chip" data-sport="${c.key}" aria-pressed="${c.key === 'nfl'}">${c.emoji} ${esc(c.label)}</button>`).join('')}</div></div>
+        <div class="field"><span>Sports <small class="muted">pick one or more</small></span><div class="chips" id="plSports">${cfg.competitions.map((c) => `<button type="button" class="chip" data-sport="${c.key}" aria-pressed="${c.key === 'nfl'}">${esc(c.label)}</button>`).join('')}</div></div>
         <div class="pl-row2">
           <label class="field"><span>Season starts</span><input type="date" name="start" value="${ymdInput(start)}" required></label>
           <label class="field"><span>Season ends</span><input type="date" name="end" value="${ymdInput(end)}" required></label>
@@ -321,12 +320,12 @@ async function renderPlCreate() {
 // =================================================================
 async function renderPlJoin(code) {
   const app = $('#app');
-  app.innerHTML = '<a class="back" href="#/predict">← Prediction Leagues</a><div class="skeleton" style="height:300px;max-width:560px;margin:0 auto"></div>';
+  app.innerHTML = '<a class="back" href="#/predict">← Pick’em</a><div class="skeleton" style="height:300px;max-width:560px;margin:0 auto"></div>';
   let d;
   try { d = await api(`/pl/invites/${encodeURIComponent(code || '')}`); }
   catch (e) {
-    app.innerHTML = `<a class="back" href="#/predict">← Prediction Leagues</a>
-      <div class="empty-state pl-narrowbox"><div class="big">🎟️</div><h2>That invite doesn't work</h2><p>${esc(e.message)}</p>
+    app.innerHTML = `<a class="back" href="#/predict">← Pick’em</a>
+      <div class="empty-state pl-narrowbox"><h2>That invite doesn't work</h2><p>${esc(e.message)}</p>
       <form class="pl-joinform" id="plRetry" style="justify-content:center"><input id="plCode2" placeholder="Try another code" maxlength="20" aria-label="Invite code"><button class="btn primary">Check code</button></form></div>`;
     $('#plRetry').onsubmit = (ev) => { ev.preventDefault(); const c = $('#plCode2').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); if (c) location.hash = `#/predict/join/${c}`; };
     return;
@@ -336,8 +335,8 @@ async function renderPlJoin(code) {
     ? `<div class="card-foot"><span>You're already in this league.</span><a class="btn primary" href="#/predict/l/${esc(l.id)}">Open league →</a></div>`
     : d.problem ? `<div class="pl-problem">${esc(d.problem)}</div>`
     : `<div class="pl-confirm"><p>You'll join as <b>${esc(me.avatar)} ${esc(me.name)}</b> <button type="button" class="linkish" id="plChangeMe">change</button></p><button class="btn primary" id="plJoinBtn" type="button">Join ${esc(l.name)}</button></div>`;
-  app.innerHTML = `<a class="back" href="#/predict">← Prediction Leagues</a>
-    <h1 class="hero-title" style="text-align:center">YOU'RE <span class="hl">INVITED</span></h1>
+  app.innerHTML = `<a class="back" href="#/predict">← Pick’em</a>
+    <h1 class="hero-title" style="text-align:center">You're invited</h1>
     <div class="pl-narrowbox">${plPublicCard(l, action)}</div>`;
   $('#plChangeMe')?.addEventListener('click', openMeDialog);
   const btn = $('#plJoinBtn');
@@ -354,12 +353,12 @@ async function renderPlJoin(code) {
 const LG_TABS = [['overview', 'Overview'], ['picks', 'Make picks'], ['week', 'Weekly'], ['season', 'Season'], ['members', 'Members'], ['history', 'History'], ['settings', 'Rules & settings']];
 
 function plLeagueHead(l, tab, needed = 0) {
-  return `<a class="back" href="#/predict">← Prediction Leagues</a>
+  return `<a class="back" href="#/predict">← Pick’em</a>
     <section class="pl-head">
       <span class="pl-av big">${esc(l.avatar)}</span>
       <div class="pl-head-main">
         <h1>${esc(l.name)}</h1>
-        <div class="pl-head-meta">${plStatusPill(l.status)}<span>${l.visibility === 'public' ? '🌎 Public' : '🔒 Private'}</span><span>${plSports(l)}</span><span>👥 ${l.members}</span><span>Week ${l.currentWeek} of ${l.weeks}</span></div>
+        <div class="pl-head-meta">${plStatusPill(l.status)}<span>${l.visibility === 'public' ? 'Public' : 'Private'}</span><span>${plSports(l)}</span><span>${pluralize(l.members, 'member')}</span><span>Week ${l.currentWeek} of ${l.weeks}</span></div>
         ${l.description ? `<p class="muted">${esc(l.description)}</p>` : ''}
       </div>
     </section>
@@ -370,7 +369,7 @@ function plLeagueHead(l, tab, needed = 0) {
 async function renderPlLeague(id, tab, sub) {
   const app = $('#app');
   pl.lid = id;
-  app.innerHTML = '<a class="back" href="#/predict">← Prediction Leagues</a><div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:320px;margin-top:16px"></div>';
+  app.innerHTML = '<a class="back" href="#/predict">← Pick’em</a><div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:320px;margin-top:16px"></div>';
   let ov;
   try { ov = await api(`/pl/leagues/${encodeURIComponent(id)}`); }
   catch (e) { app.innerHTML = plError(e, !/not found/i.test(e.message)); return; }
@@ -412,19 +411,19 @@ function plMiniTable(rows, l, { week = false } = {}) {
 // `soon` = open games in the next 7 days (can span into next week); `w` = the current league week.
 function plWeekBanner(l, w, soon) {
   const picks = `#/predict/l/${esc(l.id)}/picks`;
-  if (l.status === 'archived') return '<div class="pl-next"><span class="pl-next-ico">🗄️</span><span><b>This league is archived.</b><small>Standings are frozen. No more picks.</small></span></div>';
+  if (l.status === 'archived') return '<div class="pl-next"><span class="pl-next-ico">—</span><span><b>This league is archived.</b><small>Standings are frozen. No more picks.</small></span></div>';
   if (l.rules.picks === 'all' && soon.needed) {
-    return `<a class="pl-next hot" href="${picks}"><span class="pl-next-ico">⏰</span><span><b>${pluralize(soon.needed, 'pick')} needed in the next 7 days</b><small>First lock ${plUntil(soon.nextDeadline) ? `in ${plUntil(soon.nextDeadline)}` : 'now'} · ${esc(plWhen(soon.nextDeadline))}</small></span><span class="btn primary">Make picks →</span></a>`;
+    return `<a class="pl-next hot" href="${picks}"><span class="pl-next-ico hot">!</span><span><b>${pluralize(soon.needed, 'pick')} needed in the next 7 days</b><small>First lock ${plUntil(soon.nextDeadline) ? `in ${plUntil(soon.nextDeadline)}` : 'now'} · ${esc(plWhen(soon.nextDeadline))}</small></span><span class="btn primary">Make picks →</span></a>`;
   }
-  if (soon.open) return `<a class="pl-next" href="${picks}"><span class="pl-next-ico">✅</span><span><b>${l.rules.picks === 'all' ? `All ${soon.submitted} open games picked.` : `${soon.submitted} of ${soon.open} open games picked.`}</b><small>${l.settings.allowEdits ? 'You can still change picks until each game locks.' : 'You can still pick games you skipped.'}</small></span><span class="btn">Review picks</span></a>`;
-  if (!w.games) return `<div class="pl-next"><span class="pl-next-ico">🗓️</span><span><b>No ${plSports(l)} games this week.</b><small>${esc(plRange(w))}. The schedule comes straight from the data feed.</small></span></div>`;
-  return `<div class="pl-next"><span class="pl-next-ico">${w.final ? '🏁' : '⏳'}</span><span><b>Week ${w.week} ${w.final ? 'is final' : 'is locked'}.</b><small>${w.final ? 'Every result is in.' : `${w.resolved} of ${w.games} results in${w.postponed ? `, ${w.postponed} postponed` : ''}.`} No open games in the next 7 days.</small></span></div>`;
+  if (soon.open) return `<a class="pl-next" href="${picks}"><span class="pl-next-ico ok">✓</span><span><b>${l.rules.picks === 'all' ? `All ${soon.submitted} open games picked.` : `${soon.submitted} of ${soon.open} open games picked.`}</b><small>${l.settings.allowEdits ? 'You can still change picks until each game locks.' : 'You can still pick games you skipped.'}</small></span><span class="btn">Review picks</span></a>`;
+  if (!w.games) return `<div class="pl-next"><span class="pl-next-ico">—</span><span><b>No ${plSports(l)} games this week.</b><small>${esc(plRange(w))}. The schedule comes straight from the data feed.</small></span></div>`;
+  return `<div class="pl-next"><span class="pl-next-ico ${w.final ? 'ok' : ''}">${w.final ? '✓' : '…'}</span><span><b>Week ${w.week} ${w.final ? 'is final' : 'is locked'}.</b><small>${w.final ? 'Every result is in.' : `${w.resolved} of ${w.games} results in${w.postponed ? `, ${w.postponed} postponed` : ''}.`} No open games in the next 7 days.</small></span></div>`;
 }
 
 function paintLgOverview(ov, el) {
   const l = ov.league, w = ov.week, meRow = ov.me;
   el.innerHTML = `
-    ${ov.failed?.length ? `<p class="pl-warn">⚠️ Couldn't refresh ${esc(ov.failed.join(', ').toUpperCase())} from the data feed. Showing the last known schedule.</p>` : ''}
+    ${ov.failed?.length ? `<p class="pl-warn">Couldn't refresh ${esc(ov.failed.join(', ').toUpperCase())} from the data feed. Showing the last known schedule.</p>` : ''}
     ${plWeekBanner(l, w, ov.soon)}
     <div class="stats pl-stats">
       <div class="stat"><b>${plRank(meRow?.rank, meRow?.tied)}</b><span>your season rank</span></div>
@@ -434,17 +433,17 @@ function paintLgOverview(ov, el) {
     </div>
     <div class="layout">
       <div>
-        <section class="panel"><h3>🗓️ Up next <small>open games, next 7 days</small></h3>
+        <section class="panel"><h3>Up next <small>open games, next 7 days</small></h3>
           ${ov.upcoming.length ? `<ul class="pl-list">${ov.upcoming.map((g) => `<li><a href="#/predict/l/${esc(l.id)}/picks${g.week ? `?week=${g.week}` : ''}"><span><b>${esc(g.away?.name)} @ ${esc(g.home?.name)}</b><small>${esc(g.league.toUpperCase())} · ${g.mine ? `your pick: ${esc(sideName(g, g.mine))}` : '<span class="hot-txt">no pick yet</span>'}</small></span><span class="pl-when">${esc(plWhen(g.start))}<small>locks in ${esc(plUntil(g.start) || 'now')}</small></span></a></li>`).join('')}</ul>` : '<p class="muted">No open games left this week.</p>'}
           <a class="btn primary" href="#/predict/l/${esc(l.id)}/picks" style="margin-top:12px;display:inline-block;text-decoration:none">Make picks</a></section>
-        <section class="panel"><h3>📋 Your recent results</h3>
+        <section class="panel"><h3>Your recent results</h3>
           ${ov.recent.length ? `<ul class="pl-list">${ov.recent.map((x) => `<li><span><b>${esc(x.game.away?.abbr)} ${x.game.away?.score ?? ''} @ ${esc(x.game.home?.abbr)} ${x.game.home?.score ?? ''}</b><small>you: ${esc(x.pick ? sideName(x.game, x.pick) : 'no pick')}${x.auto ? ' (auto)' : ''}</small></span>${plBadge(x.status, x.points ? ` +${x.points}` : '')}</li>`).join('')}</ul>` : '<p class="muted">Nothing graded yet. Results land here as soon as games go final.</p>'}</section>
-        <section class="panel"><h3>📣 Activity</h3>${ov.activity.length ? `<ul class="pl-feed">${ov.activity.map((a) => `<li><span>${esc(a.text)}</span><small>${ago(a.at)}</small></li>`).join('')}</ul>` : '<p class="muted">Nothing yet.</p>'}</section>
+        <section class="panel"><h3>Activity</h3>${ov.activity.length ? `<ul class="pl-feed">${ov.activity.map((a) => `<li><span>${esc(a.text)}</span><small>${ago(a.at)}</small></li>`).join('')}</ul>` : '<p class="muted">Nothing yet.</p>'}</section>
       </div>
       <aside class="side">
-        <section class="panel"><h3>🏆 Season standings <small><a href="#/predict/l/${esc(l.id)}/season">full table →</a></small></h3>${plMiniTable(ov.season, l)}</section>
-        <section class="panel"><h3>📅 Week ${w.week} <small><a href="#/predict/l/${esc(l.id)}/week">details →</a></small></h3>${plMiniTable(ov.weekTop, l, { week: true })}</section>
-        <section class="panel"><h3>📜 Rules</h3>${plRulesList(l, true)}</section>
+        <section class="panel"><h3>Season standings <small><a href="#/predict/l/${esc(l.id)}/season">full table →</a></small></h3>${plMiniTable(ov.season, l)}</section>
+        <section class="panel"><h3>Week ${w.week} <small><a href="#/predict/l/${esc(l.id)}/week">details →</a></small></h3>${plMiniTable(ov.weekTop, l, { week: true })}</section>
+        <section class="panel"><h3>Rules</h3>${plRulesList(l, true)}</section>
       </aside>
     </div>`;
   every(async () => { try { const fresh = await api(`/pl/leagues/${l.id}`); if (pl.lid === l.id && $('#plTab')) paintLgOverview(fresh, $('#plTab')); } catch { /* keep */ } }, 60000);
@@ -523,14 +522,14 @@ function matchCard(g, l) {
 
   const lockTxt = g.phase === 'postponed' ? 'Postponed. Picks reopen if it gets a new start time.'
     : g.editable ? `Locks ${esc(fmtTime(new Date(g.start).toISOString()))} · <b>in ${esc(plUntil(g.start))}</b>`
-    : final ? esc(g.detail || 'Final') : g.phase === 'in' ? `🔴 ${esc(g.detail || 'Live')}` : 'Locked at kickoff';
+    : final ? esc(g.detail || 'Final') : g.phase === 'in' ? `${esc(g.detail || 'Live')}` : 'Locked at kickoff';
   const split = g.split && (g.split.home + g.split.away + g.split.draw) ? `<span class="muted">League: ${esc(g.away?.abbr)} ${g.split.away} · ${g.drawPick ? `Draw ${g.split.draw} · ` : ''}${esc(g.home?.abbr)} ${g.split.home}</span>` : '';
   const mineTxt = g.draft ? '<span class="hot-txt">Not submitted yet</span>'
     : g.mine?.auto ? `<span class="muted">Auto pick: ${esc(sideName(g, 'home'))} (missed-pick rule)</span>`
     : g.mine ? `<span class="muted">Your pick: <b>${esc(sideName(g, g.mine.pick))}</b> · saved ${esc(ago(g.mine.updatedAt))}</span>`
     : g.editable ? '<span class="muted">Tap a team to pick</span>' : '';
   return `<article class="pl-match st-${esc(g.view)} ${g.editable ? 'editable' : ''}" data-key="${esc(g.key)}">
-    <div class="pl-m-top"><span>${esc(l.sports.find((s) => s.key === g.league)?.emoji || '')} ${esc(g.league.toUpperCase())} · ${esc(plWhen(g.start))}</span>${plBadge(g.view, g.view === 'correct' && g.points ? ` +${g.points}` : '')}</div>
+    <div class="pl-m-top"><span>${esc(g.league.toUpperCase())} · ${esc(plWhen(g.start))}</span>${plBadge(g.view, g.view === 'correct' && g.points ? ` +${g.points}` : '')}</div>
     <div class="pl-sides ${g.drawPick ? 'three' : ''}">${side('away')}${g.drawPick ? `<button type="button" class="pl-side pl-draw ${sel === 'draw' ? 'sel' : ''} ${final && g.outcome === 'tie' ? 'won' : ''}" data-side="draw" aria-pressed="${sel === 'draw'}" ${g.editable ? '' : 'disabled'}><b>Draw</b>${sel === 'draw' ? '<span class="pl-check">✓</span>' : ''}</button>` : ''}${side('home')}</div>
     ${final || g.phase === 'in' ? '' : prob}
     ${final && p.status === 'ok' ? prob : ''}
@@ -561,10 +560,10 @@ function paintSlate(quiet = false) {
   const el = $('#plTab');
   el.innerHTML = `
     ${plWeekStepper(l, d.week, d.weeks, 'picks')}
-    ${d.failed?.length ? `<p class="pl-warn">⚠️ Couldn't refresh ${esc(d.failed.join(', ').toUpperCase())} from the data feed. Showing the last known schedule.</p>` : ''}
+    ${d.failed?.length ? `<p class="pl-warn">Couldn't refresh ${esc(d.failed.join(', ').toUpperCase())} from the data feed. Showing the last known schedule.</p>` : ''}
     <div class="controls pl-filters">
       <div class="chips" role="group" aria-label="Filter games">${PICK_FILTERS.map(([k, label]) => { const n = all.filter((g) => inSport(g) && match[k](g)).length; return `<button class="chip ${n ? '' : 'empty'} ${k === 'needed' && n ? 'chip-live' : ''}" data-f="${k}" aria-pressed="${pl.filter === k}">${label} <span class="count">${n}</span></button>`; }).join('')}</div>
-      ${l.sports.length > 1 ? `<div class="chips" role="group" aria-label="Sport">${[{ key: 'all', emoji: '🌎', label: 'All sports' }, ...l.sports].map((s) => `<button class="chip" data-sp="${s.key}" aria-pressed="${pl.sport === s.key}">${s.emoji} ${esc(s.label)}</button>`).join('')}</div>` : ''}
+      ${l.sports.length > 1 ? `<div class="chips" role="group" aria-label="Sport">${[{ key: 'all', emoji: '🌎', label: 'All sports' }, ...l.sports].map((s) => `<button class="chip" data-sp="${s.key}" aria-pressed="${pl.sport === s.key}">${esc(s.label)}</button>`).join('')}</div>` : ''}
     </div>
     <p class="pl-note">${l.rules.picks === 'all' ? 'Every game counts. Skipping one is a miss.' : 'Pick any games you like. Unpicked games don\'t count.'}
       Picks lock at each game's scheduled start. Times are in ${esc(plTz)}. ${l.settings.allowEdits ? 'You can change a submitted pick until it locks.' : '<b>Picks are final once submitted.</b>'}
@@ -605,7 +604,7 @@ function paintSlate(quiet = false) {
 }
 
 function slateGroups(list, l) {
-  if (!pl.slate.games.length) return `<div class="empty-state"><div class="big">🗓️</div><p>No ${plSports(l)} games scheduled for this week.</p><p class="muted">The schedule comes from the data feed. Try the next week.</p></div>`;
+  if (!pl.slate.games.length) return `<div class="empty-state"><p>No ${plSports(l)} games scheduled for this week.</p><p class="muted">The schedule comes from the data feed. Try the next week.</p></div>`;
   if (!list.length) {
     const msg = { needed: ['🎉', 'Nothing left to pick. You\'re all set.'], submitted: ['🫥', 'No submitted picks yet this week.'], live: ['🍿', 'No games in progress right now.'], final: ['⏳', 'No final results yet. Waiting on the games.'] }[pl.filter] || ['🔍', 'No games match these filters.'];
     return `<div class="empty-state"><div class="big">${msg[0]}</div><p>${msg[1]}</p></div>`;
@@ -651,7 +650,7 @@ function reviewPicks(drafts) {
       setDrafts(l.id, dr);
       pl.slate = await api(`/pl/leagues/${l.id}/slate?week=${pl.slate.week.week}`).catch(() => pl.slate);
       paintSlate();
-      if (ok === r.results.length) { d.close(); confetti(80); toast(`✅ ${pluralize(ok, 'pick')} submitted. Locked in.`); }
+      if (ok === r.results.length) { d.close(); confetti(80); toast(`${pluralize(ok, 'pick')} submitted. Locked in.`); }
       else { toast(`${ok} saved, ${r.results.length - ok} couldn't be saved. See why below.`, true); go.textContent = 'Done'; go.disabled = false; go.onclick = () => d.close(); }
     } catch (e) {
       toast(`Couldn't submit: ${e.message} Your picks are still here. Try again.`, true);
@@ -677,10 +676,10 @@ async function paintLgWeek(l, el, week) {
       + (meRow && meRow !== leader && !(meRow.rank === leader.rank) ? ` You're ${meRow.behind} back.` : meRow && meRow.rank === 1 ? ' That\'s you. 👑' : '')
     : 'No points on the board yet.';
   el.innerHTML = `${plWeekStepper(l, w, d.weeks, 'week')}
-    <div class="pl-next ${w.final ? '' : 'soft'}"><span class="pl-next-ico">${w.final ? '🏁' : '⏳'}</span><span><b>${lead}</b><small>${state}</small></span></div>
-    <section class="panel"><h3>📅 Week ${w.week} leaderboard <small>${pluralize(w.games, 'game')}</small></h3>
+    <div class="pl-next ${w.final ? '' : 'soft'}"><span class="pl-next-ico ${w.final ? 'ok' : ''}">${w.final ? '✓' : '…'}</span><span><b>${lead}</b><small>${state}</small></span></div>
+    <section class="panel"><h3>Week ${w.week} leaderboard <small>${pluralize(w.games, 'game')}</small></h3>
       ${plTable(l, rows, 'week')}
-      <p class="muted pl-legend">✅ correct · ❌ wrong · ⌛ missed · Acc = correct ÷ decided picks. ${l.rules.ties === 'shared' ? 'Equal points share a rank (T-).' : 'Ties are broken by correct picks, then fewer misses, then accuracy.'}</p>
+      <p class="muted pl-legend">R = right · W = wrong · M = missed · Acc = correct ÷ decided picks. ${l.rules.ties === 'shared' ? 'Equal points share a rank (T-).' : 'Ties are broken by correct picks, then fewer misses, then accuracy.'}</p>
     </section>`;
 }
 
@@ -689,7 +688,7 @@ function plTable(l, rows, kind) {
   const season = kind === 'season';
   const maxWeek = season ? Math.max(1, ...rows.flatMap((r) => r.weekly.map((x) => x.points))) : 0;
   return `<div class="table-scroll"><table class="lines pl-table"><thead><tr>
-      <th>#</th>${season ? '<th title="Change since last week">±</th>' : ''}<th class="pl-who">Player</th><th>Pts</th><th title="Correct">✅</th><th title="Wrong">❌</th><th title="Missed">⌛</th><th>Acc</th>${season ? '<th>By week</th>' : '<th>Back</th>'}
+      <th>#</th>${season ? '<th title="Change since last week">±</th>' : ''}<th class="pl-who">Player</th><th>Pts</th><th title="Right">R</th><th title="Wrong">W</th><th title="Missed">M</th><th>Acc</th>${season ? '<th>By week</th>' : '<th>Back</th>'}
     </tr></thead><tbody>${rows.map((r) => `<tr class="${r.me ? 'mine' : ''}">
       <td>${plRank(r.rank, r.tied)}</td>
       ${season ? `<td class="pl-move">${r.move == null ? '' : r.move > 0 ? `<span class="good-txt">▲${r.move}</span>` : r.move < 0 ? `<span class="hot-txt">▼${-r.move}</span>` : '<span class="muted">–</span>'}</td>` : ''}
@@ -705,7 +704,7 @@ async function paintLgSeason(l, el) {
   let d;
   try { d = await api(`/pl/leagues/${l.id}/season`); } catch (e) { el.innerHTML = plError(e); return; }
   const scored = d.rows.reduce((a, r) => a + r.scored, 0);
-  el.innerHTML = `<section class="panel"><h3>🏆 Season standings <small>through week ${d.currentWeek} of ${d.totalWeeks}</small></h3>
+  el.innerHTML = `<section class="panel"><h3>Season standings <small>through week ${d.currentWeek} of ${d.totalWeeks}</small></h3>
       ${scored ? '' : '<p class="muted">No graded games yet. Points show up here when results go final.</p>'}
       ${plTable(l, d.rows, 'season')}
       <p class="muted pl-legend">± = movement since before this week's results. Tap a player to see their record and the picks you're allowed to see. Weekly and season numbers come from the same graded picks.</p>
@@ -721,10 +720,10 @@ async function paintLgMembers(l, el) {
   } catch (e) { el.innerHTML = plError(e); return; }
   const lg = d.league;
   el.innerHTML = `<div class="layout">
-    <section class="panel"><h3>👥 Members <small>${lg.members} of ${lg.settings.maxMembers}</small></h3>
+    <section class="panel"><h3>Members <small>${lg.members} of ${lg.settings.maxMembers}</small></h3>
       <ul class="pl-members">${d.members.map((m) => `<li class="${m.me ? 'mine' : ''}">
         <span class="av">${esc(m.avatar)}</span>
-        <a href="#/predict/l/${esc(lg.id)}/m/${esc(m.mid)}"><b>${esc(m.name)}${m.me ? ' <span class="muted">(you)</span>' : ''}</b><small>${m.role === 'owner' ? '👑 Owner' : 'Member'} · joined ${esc(plDay(m.joinedAt))}</small></a>
+        <a href="#/predict/l/${esc(lg.id)}/m/${esc(m.mid)}"><b>${esc(m.name)}${m.me ? ' <span class="muted">(you)</span>' : ''}</b><small>${m.role === 'owner' ? 'Owner' : 'Member'} · joined ${esc(plDay(m.joinedAt))}</small></a>
         <span class="pl-mstat">${plRank(m.rank)} · ${m.points} pts</span>
         ${lg.perms.owner && m.role !== 'owner' ? `<button class="btn ghost danger-txt" type="button" data-remove="${esc(m.mid)}" data-name="${esc(m.name)}">Remove</button>` : ''}
       </li>`).join('')}</ul>
@@ -749,12 +748,12 @@ async function paintLgMembers(l, el) {
 function paintInvite(lg, inv) {
   const el = $('#plInvite'); if (!el) return;
   if (!lg.perms.invite) {
-    el.innerHTML = `<h3>✉️ Invites</h3><p class="muted">${lg.archived || lg.status === 'archived' ? 'This league is archived.' : lg.status === 'completed' ? 'The season is over.' : 'Only the league owner can invite people to this league.'}</p>`;
+    el.innerHTML = `<h3>Invites</h3><p class="muted">${lg.archived || lg.status === 'archived' ? 'This league is archived.' : lg.status === 'completed' ? 'The season is over.' : 'Only the league owner can invite people to this league.'}</p>`;
     return;
   }
   const i = inv?.invite;
   const link = i ? `${location.origin}/#/predict/join/${i.code}` : '';
-  el.innerHTML = `<h3>✉️ Invite people</h3>
+  el.innerHTML = `<h3>Invite people</h3>
     ${i ? `<div class="pl-code" aria-label="Invite code">${esc(i.code)}</div>
       <div class="pl-linkrow"><input readonly value="${esc(link)}" aria-label="Invite link" id="plLink"><button class="btn" type="button" id="plCopy">Copy link</button></div>
       <div class="row" style="margin-top:8px;flex-wrap:wrap">${navigator.share ? '<button class="btn primary" type="button" id="plShare">Share…</button>' : ''}<button class="btn ghost" type="button" id="plCopyCode">Copy code</button></div>
@@ -795,16 +794,16 @@ async function paintLgProfile(l, el, mid) {
     ${m.me ? '' : `<a class="back" href="#/predict/l/${esc(l.id)}/season">← Season standings</a>`}
     <section class="panel pl-profile">
       <span class="pl-av big">${esc(m.avatar)}</span>
-      <div><h2>${esc(m.name)}${m.me ? ' <span class="muted">(you)</span>' : ''}</h2><small class="muted">${m.role === 'owner' ? '👑 League owner · ' : ''}joined ${esc(plDay(m.joinedAt))} · stats for this league only${m.me ? ' (see <a href="#/predict/me">all leagues</a>)' : ''}</small></div>
+      <div><h2>${esc(m.name)}${m.me ? ' <span class="muted">(you)</span>' : ''}</h2><small class="muted">${m.role === 'owner' ? 'League owner · ' : ''}joined ${esc(plDay(m.joinedAt))} · stats for this league only${m.me ? ' (see <a href="#/predict/me">all leagues</a>)' : ''}</small></div>
       <div class="pl-card-stats">
         <div><b>${plRank(r.rank, r.tied)}</b><span>rank</span></div><div><b>${r.points ?? 0}</b><span>points</span></div>
         <div><b>${r.correct ?? 0}-${r.incorrect ?? 0}</b><span>record</span></div><div><b>${plAcc(r.accuracy)}</b><span>accuracy</span></div><div><b>${r.missed ?? 0}</b><span>missed</span></div>
       </div>
     </section>
-    ${d.hiddenNote ? `<p class="pl-note">🙈 ${esc(d.hiddenNote)}</p>` : ''}
+    ${d.hiddenNote ? `<p class="pl-note">${esc(d.hiddenNote)}</p>` : ''}
     ${d.picks.length ? [...weeks].map(([w, ps]) => `<section class="panel"><h3>Week ${w ?? '?'} <small>${wkPts.has(w) ? `${wkPts.get(w)} pts` : ''}</small></h3>
       <ul class="pl-list">${ps.map((p) => `<li><span><b>${esc(p.game.away?.abbr)}${p.game.outcome ? ` ${p.game.away?.score ?? ''}` : ''} @ ${esc(p.game.home?.abbr)}${p.game.outcome ? ` ${p.game.home?.score ?? ''}` : ''}</b><small>${esc(plWhen(p.game.start))} · pick: ${esc(p.pick ? sideName(p.game, p.pick) : 'none')}${p.auto ? ' (auto)' : ''}</small></span>${plBadge(p.status, p.points ? ` +${p.points}` : '')}</li>`).join('')}</ul></section>`).join('')
-      : `<div class="empty-state"><div class="big">📭</div><p>${m.me ? 'No picks yet. Your history builds up as you play.' : 'Nothing to show yet. Picks appear here once games lock.'}</p>${m.me ? `<a class="btn primary" href="#/predict/l/${esc(l.id)}/picks">Make picks</a>` : ''}</div>`}`;
+      : `<div class="empty-state"><p>${m.me ? 'No picks yet. Your history builds up as you play.' : 'Nothing to show yet. Picks appear here once games lock.'}</p>${m.me ? `<a class="btn primary" href="#/predict/l/${esc(l.id)}/picks">Make picks</a>` : ''}</div>`}`;
 }
 
 // ---------- rules & settings ----------
@@ -830,7 +829,7 @@ async function paintLgSettings(l, el) {
   const opt = (name, opts, val, disabled) => `<select class="select" name="${name}" ${disabled ? 'disabled' : ''}>${opts.map(([v, t]) => `<option value="${v}" ${String(val) === String(v) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   el.innerHTML = `<div class="layout">
     <div>
-      <section class="panel"><h3>📜 How this league works</h3>
+      <section class="panel"><h3>How this league works</h3>
         <dl class="pl-dl">
           <dt>Format</dt><dd>${esc(l.formatLabel)}</dd>
           <dt>Scoring</dt><dd>${esc(l.scoring?.label)}</dd>
@@ -842,12 +841,12 @@ async function paintLgSettings(l, el) {
         ${plRulesList(l)}
         <p class="muted pl-hint">Postponed games stay open for scoring and count once they're actually played. Canceled games aren't scored. If an official result gets corrected, standings update automatically.</p>
       </section>
-      ${own ? `<section class="panel"><h3>⚙️ League settings <small>owner only</small></h3>
+      ${own ? `<section class="panel"><h3>League settings <small>owner only</small></h3>
         <form id="plSettings" class="pl-form">
           <label class="field"><span>Name</span><input name="leagueName" value="${esc(l.name)}" maxlength="40" minlength="3" required></label>
           <label class="field"><span>Description</span><textarea name="description" maxlength="200" rows="2">${esc(l.description)}</textarea></label>
           <div class="pl-row2">
-            <label class="field"><span>Visibility</span>${opt('visibility', [['private', '🔒 Private (invite only)'], ['public', '🌎 Public (in Discover)']], l.visibility)}</label>
+            <label class="field"><span>Visibility</span>${opt('visibility', [['private', 'Private (invite only)'], ['public', 'Public (in Discover)']], l.visibility)}</label>
             <label class="field"><span>Max members</span><input type="number" name="maxMembers" min="${Math.max(2, l.members)}" max="${cfg?.limits.maxMembers || 500}" value="${l.settings.maxMembers}"></label>
             <label class="field"><span>Changing picks</span>${opt('allowEdits', [['1', 'Allowed until lock'], ['0', 'First pick is final']], l.settings.allowEdits ? 1 : 0)}</label>
             <label class="field"><span>Others see picks</span>${opt('picksVisible', [['after_lock', 'After each game locks'], ['always', 'Right away']], l.settings.picksVisible)}</label>
@@ -863,9 +862,9 @@ async function paintLgSettings(l, el) {
           </div>
           <div class="row end"><button class="btn primary" type="submit">Save settings</button></div>
         </form></section>
-      <section class="panel pl-danger"><h3>🗄️ Archive league</h3><p class="muted">Ends the league for everyone: no more picks, invites turn off, and standings are frozen as they are. This can't be undone.</p><button class="btn danger" type="button" id="plArchive" ${l.status === 'archived' ? 'disabled' : ''}>${l.status === 'archived' ? 'Archived' : 'Archive league'}</button></section>` : ''}
+      <section class="panel pl-danger"><h3>Archive league</h3><p class="muted">Ends the league for everyone: no more picks, invites turn off, and standings are frozen as they are. This can't be undone.</p><button class="btn danger" type="button" id="plArchive" ${l.status === 'archived' ? 'disabled' : ''}>${l.status === 'archived' ? 'Archived' : 'Archive league'}</button></section>` : ''}
     </div>
-    <aside class="side"><section class="panel"><h3>🛡️ Fair play</h3><ul class="pl-rules">
+    <aside class="side"><section class="panel"><h3>Fair play</h3><ul class="pl-rules">
       <li>Deadlines are checked on the server against the data provider's current game status and start time. Changing your device clock won't help.</li>
       <li>Points come only from official final results, never from ESPN's win probabilities.</li>
       <li>Every result change is logged, and standings are recalculated from the picks, so nobody gets scored twice.</li>
@@ -894,16 +893,16 @@ async function paintLgSettings(l, el) {
 // =================================================================
 async function renderPlStats() {
   const app = $('#app');
-  app.innerHTML = '<a class="back" href="#/predict">← Prediction Leagues</a><div class="skeleton" style="height:320px"></div>';
+  app.innerHTML = '<a class="back" href="#/predict">← Pick’em</a><div class="skeleton" style="height:320px"></div>';
   let d;
   try { d = await api('/pl/me/stats'); } catch (e) { app.innerHTML = plError(e); return; }
   const o = d.overall;
   const st = d.streak.current;
   const maxW = Math.max(1, ...d.byWeek.map((w) => w.correct + w.incorrect));
-  app.innerHTML = `<a class="back" href="#/predict">← Prediction Leagues</a>
-    <h1 class="hero-title">YOUR <span class="hl">PREDICTION</span> RECORD</h1>
-    <p class="hero-sub">Every pick you've made, across every league, as ${esc(me.avatar)} ${esc(me.name)}. Only real picks and official results count.</p>
-    ${!o.picks ? `<div class="empty-state"><div class="big">🔮</div><h2>No picks yet</h2><p>Your record starts with your first pick. Join or create a league to get going.</p><a class="btn primary" href="#/predict">Go to Prediction Leagues</a></div>` : `
+  app.innerHTML = `<a class="back" href="#/predict">← Pick’em</a>
+    <div class="page-head"><h1 class="hero-title">Your pick’em record</h1>
+    <p class="hero-sub">Every pick you've made, across every league, as ${esc(me.avatar)} ${esc(me.name)}. Only real picks and official results count.</p></div>
+    ${!o.picks ? `<div class="empty-state"><h2>No picks yet</h2><p>Your record starts with your first pick. Join or create a league to get going.</p><a class="btn primary" href="#/predict">Go to Prediction Leagues</a></div>` : `
     <div class="stats pl-stats">
       <div class="stat"><b>${o.picks}</b><span>picks made</span></div>
       <div class="stat"><b>${o.correct}-${o.incorrect}</b><span>right-wrong</span></div>
@@ -911,12 +910,12 @@ async function renderPlStats() {
       <div class="stat ${st?.kind === 'correct' && st.length >= 3 ? 'hot' : ''}"><b>${st ? `${st.kind === 'correct' ? '🔥' : '🧊'} ${st.length}` : '–'}</b><span>current streak</span></div>
       <div class="stat"><b>${d.streak.best}</b><span>best streak</span></div>
     </div>
-    ${o.pending ? `<p class="pl-note">⏳ ${pluralize(o.pending, 'pick')} waiting on results.${o.push || o.void ? ` ${o.push + o.void} pushed or voided.` : ''}</p>` : ''}
+    ${o.pending ? `<p class="pl-note">${pluralize(o.pending, 'pick')} waiting on results.${o.push || o.void ? ` ${o.push + o.void} pushed or voided.` : ''}</p>` : ''}
     <div class="pl-cols">
-      <section class="panel"><h3>🏟️ By sport</h3>${d.bySport.length ? `<table class="lines pl-table compact"><thead><tr><th>Sport</th><th>Picks</th><th>W-L</th><th>Acc</th></tr></thead><tbody>${d.bySport.map((s) => `<tr><td>${s.emoji} ${esc(s.label)}</td><td>${s.picks}</td><td>${s.correct}-${s.incorrect}</td><td>${plAcc(s.accuracy)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">–</p>'}</section>
-      <section class="panel"><h3>📈 Week by week <small>calendar weeks, Mon–Sun</small></h3>${d.byWeek.length ? `<ul class="pl-bars">${d.byWeek.slice(-12).map((w) => `<li><span>${esc(plDay(w.start))}</span><div class="pl-bar"><i class="c" style="width:${(w.correct / maxW) * 100}%"></i><i class="x" style="width:${(w.incorrect / maxW) * 100}%"></i></div><b>${w.correct}-${w.incorrect}</b></li>`).join('')}</ul>` : '<p class="muted">Weekly results appear once your picks are graded.</p>'}</section>
+      <section class="panel"><h3>By sport</h3>${d.bySport.length ? `<table class="lines pl-table compact"><thead><tr><th>Sport</th><th>Picks</th><th>W-L</th><th>Acc</th></tr></thead><tbody>${d.bySport.map((s) => `<tr><td>${esc(s.label)}</td><td>${s.picks}</td><td>${s.correct}-${s.incorrect}</td><td>${plAcc(s.accuracy)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">–</p>'}</section>
+      <section class="panel"><h3>Week by week <small>calendar weeks, Mon–Sun</small></h3>${d.byWeek.length ? `<ul class="pl-bars">${d.byWeek.slice(-12).map((w) => `<li><span>${esc(plDay(w.start))}</span><div class="pl-bar"><i class="c" style="width:${(w.correct / maxW) * 100}%"></i><i class="x" style="width:${(w.incorrect / maxW) * 100}%"></i></div><b>${w.correct}-${w.incorrect}</b></li>`).join('')}</ul>` : '<p class="muted">Weekly results appear once your picks are graded.</p>'}</section>
     </div>`}
-    <section class="panel" style="margin-top:18px"><h3>🏆 By league <small>league-only numbers include misses</small></h3>
-      ${d.leagues.length ? `<div class="table-scroll"><table class="lines pl-table"><thead><tr><th>League</th><th>Rank</th><th>Pts</th><th>✅</th><th>❌</th><th>⌛</th><th>Acc</th></tr></thead><tbody>${d.leagues.map((l) => `<tr><td><a href="#/predict/l/${esc(l.id)}">${esc(l.avatar)} ${esc(l.name)}</a> ${l.active ? '' : '<span class="muted">(left)</span>'}</td><td>${plRank(l.rank)} / ${l.of}</td><td class="tot">${l.points}</td><td>${l.correct}</td><td>${l.incorrect}</td><td>${l.missed}</td><td>${plAcc(l.accuracy)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">You\'re not in any leagues yet.</p>'}
+    <section class="panel" style="margin-top:18px"><h3>By league <small>league-only numbers include misses</small></h3>
+      ${d.leagues.length ? `<div class="table-scroll"><table class="lines pl-table"><thead><tr><th>League</th><th>Rank</th><th>Pts</th><th title="Right">R</th><th title="Wrong">W</th><th title="Missed">M</th><th>Acc</th></tr></thead><tbody>${d.leagues.map((l) => `<tr><td><a href="#/predict/l/${esc(l.id)}">${esc(l.avatar)} ${esc(l.name)}</a> ${l.active ? '' : '<span class="muted">(left)</span>'}</td><td>${plRank(l.rank)} / ${l.of}</td><td class="tot">${l.points}</td><td>${l.correct}</td><td>${l.incorrect}</td><td>${l.missed}</td><td>${plAcc(l.accuracy)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">You\'re not in any leagues yet.</p>'}
     </section>`;
 }

@@ -14,6 +14,8 @@ npm run dev      # same, restarts on file changes
 
 There are no dependencies to install. You need Node 18 or newer. Set `PORT=xxxx` to use a different port. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+**Production:** `docker build .` or `fly deploy`. [docs/DEPLOY.md](docs/DEPLOY.md) covers hosting, environment variables (see `.env.example`), health checks, and how far a single instance goes. The service worker is off on `localhost` so edits show up on refresh (add `?sw=1` to test it).
+
 ## What's in it
 
 - **Scoreboard of Chaos**: every league or just one, today or any date, filtered by Live, Upcoming or Final, plus team search (press `/`). Every chip shows how many games you'll get. Filters live in the URL (e.g. `#/?league=nfl&status=in`), so filtered views can be shared, and a fresh visit always starts on everything. Sort by "most chaotic" or "most takes". Live games refresh every 30s, and a score bumps when it changes.
@@ -85,6 +87,9 @@ Code: `lib/bets/` (`track.js` the pure live math and bad-beat rules, `demo.js` t
 - `public/`: the frontend, written in vanilla JS with no build step. `app.js` handles scores, games and the Hall, `live.js` the live rooms, `fantasy.js` fantasy, and `tour.js` the tour page.
 
 ## Before putting it on the internet
+
+Done: security headers and CSP, compression and long-lived caching, `/healthz`, a graceful shutdown that saves all data, per-IP rate limits behind a proxy (`TRUST_PROXY=1`), an installable app (manifest + service worker), share cards, and a Dockerfile plus `fly.toml`. Still to do:
+
 
 - Identity is a random ID kept in the browser's localStorage. Add real auth (Clerk, as in Tyche Chat) before going public.
 - Move from the JSON file to Postgres or SQLite once there's real traffic.

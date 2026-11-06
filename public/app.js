@@ -138,7 +138,7 @@ function sideColors(g) {
 
 // ---------- shared bits ----------
 const logo = (t, cls = '') => t?.logo
-  ? `<img class="${cls}" src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'logo-fallback',textContent:'${esc(t.abbr || '?')}'}))">`
+  ? `<img class="${cls}" src="${esc(t.logo)}" alt="" loading="lazy" data-fallback="${esc(t.abbr || '?')}">`
   : `<div class="logo-fallback ${cls}">${esc(t?.abbr || '?')}</div>`;
 
 function statusLabel(g) {
@@ -164,10 +164,13 @@ async function loadTicker() {
       .sort((x, y) => order[x.status.state] - order[y.status.state] || y.vibe.chaos - x.vibe.chaos)
       .slice(0, 18)
       .map((g) => {
-        const sc = g.status.state === 'pre' ? 'vs' : `${g.away.score ?? 0}-${g.home.score ?? 0}`;
-        return `<span><b>${esc(g.leagueLabel)}</b>${esc(g.away.abbr)} ${esc(sc)} ${esc(g.home.abbr)}: ${esc(g.vibe.line)}</span>`;
+        const st = g.status.state;
+        const when = st === 'pre' ? new Date(g.date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.status.short || g.status.detail || '';
+        const lead = (a, b) => (st === 'post' && Number(a) > Number(b) ? ' class="w"' : '');
+        const mid = st === 'pre' ? '<i>at</i>' : `<span${lead(g.away.score, g.home.score)}>${esc(g.away.score ?? 0)}</span><i>–</i><span${lead(g.home.score, g.away.score)}>${esc(g.home.score ?? 0)}</span>`;
+        return `<a href="#/${st === 'in' ? 'live' : 'game'}/${esc(g.league)}/${esc(g.id)}" class="${st === 'in' ? 'is-live' : ''}"><b>${esc(g.leagueLabel)}</b>${esc(g.away.abbr)} ${mid} ${esc(g.home.abbr)}<em>${esc(when)}</em></a>`;
       });
-    const html = items.length ? items.join('') : '<span><b>BREAKING</b>No games today. Go outside. Touch grass. Report back.</span>';
+    const html = items.length ? items.join('') : '<span><b>Today</b>No games scheduled. Back tomorrow.</span>';
     $('#ticker').innerHTML = html + html; // doubled for a seamless loop
   } catch { $('#ticker').innerHTML = '<span><b>TICKER</b>The ticker intern is on lunch break.</span>'.repeat(2); }
 }
@@ -233,7 +236,7 @@ const SUBTITLES = [
   'Where hot takes come to be judged.',
   'Like a sports app, but it roasts.',
 ];
-const STATUS = [['all', 'Everything'], ['in', '🔴 Live'], ['pre', '⏳ Upcoming'], ['post', '✅ Final']];
+const STATUS = [['all', 'Everything'], ['in', 'Live'], ['pre', 'Upcoming'], ['post', 'Final']];
 
 async function renderScores() {
   readScoreParams();
@@ -242,8 +245,7 @@ async function renderScores() {
   const today = ymd(new Date());
   app.innerHTML = `
     <section class="spot-wrap" id="spot"></section>
-    <h1 class="hero-title">THE <span class="hl">SCOREBOARD</span> OF CHAOS</h1>
-    <p class="hero-sub">${esc(rand(SUBTITLES))}</p>
+    <div class="page-head"><h1 class="hero-title">Scores</h1><p class="hero-sub">${esc(rand(SUBTITLES))}</p></div>
     <div class="controls">
       <div class="datebar" role="group" aria-label="Date">
         <button type="button" data-shift="-1" aria-label="Previous day">◀</button>
@@ -253,11 +255,11 @@ async function renderScores() {
       </div>
       <div class="chips" id="filters" role="group" aria-label="Status filter"></div>
       <span class="spacer"></span>
-      <label class="search"><span aria-hidden="true">🔎</span><input id="teamSearch" type="search" placeholder="Find a team…" value="${esc(sb.q)}" aria-label="Find a team" autocomplete="off"><kbd>/</kbd></label>
+      <label class="search"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="teamSearch" type="search" placeholder="Find a team…" value="${esc(sb.q)}" aria-label="Find a team" autocomplete="off"><kbd>/</kbd></label>
       <select class="select" id="sortSel" aria-label="Sort">
         <option value="league" ${sb.sort === 'league' ? 'selected' : ''}>Group by league</option>
-        <option value="chaos" ${sb.sort === 'chaos' ? 'selected' : ''}>🌪️ Most chaotic first</option>
-        <option value="takes" ${sb.sort === 'takes' ? 'selected' : ''}>💬 Most takes first</option>
+        <option value="chaos" ${sb.sort === 'chaos' ? 'selected' : ''}>Most chaotic first</option>
+        <option value="takes" ${sb.sort === 'takes' ? 'selected' : ''}>Most takes first</option>
       </select>
     </div>
     <div class="chips" id="leagueChips" role="group" aria-label="League"></div>
@@ -303,7 +305,7 @@ async function loadGames(quiet = false) {
     paintGames(quiet);
     paintSpotlight(quiet);
   } catch (e) {
-    if (!quiet) $('#games').innerHTML = `<div class="empty-state"><div class="big">📡</div><p>${esc(e.message)}</p><button class="btn primary" onclick="route()">Try again</button></div>`;
+    if (!quiet) $('#games').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p><button class="btn primary" type="button" data-retry>Try again</button></div>`;
   }
 }
 
@@ -325,8 +327,8 @@ function paintGames(quiet = false) {
   const leagueCount = (key) => base.filter((g) => (key === 'all' || g.league === key) && inStatus(g)).length;
   const live = base.filter((g) => inLeague(g) && g.status.state === 'in').length;
   $('#leagueChips').innerHTML = [
-    `<button class="chip" data-league="all" aria-pressed="${sb.league === 'all'}">🌎 All sports <span class="count">${leagueCount('all')}</span></button>`,
-    ...sb.leagues.map((l) => { const n = leagueCount(l.key); return `<button class="chip ${n ? '' : 'empty'}" data-league="${l.key}" aria-pressed="${sb.league === l.key}">${l.emoji} ${esc(l.label)} <span class="count">${n}</span></button>`; }),
+    `<button class="chip" data-league="all" aria-pressed="${sb.league === 'all'}">All sports <span class="count">${leagueCount('all')}</span></button>`,
+    ...sb.leagues.map((l) => { const n = leagueCount(l.key); return `<button class="chip ${n ? '' : 'empty'}" data-league="${l.key}" aria-pressed="${sb.league === l.key}">${esc(l.label)} <span class="count">${n}</span></button>`; }),
   ].join('');
 
   const list = base.filter((g) => inLeague(g) && inStatus(g));
@@ -335,17 +337,17 @@ function paintGames(quiet = false) {
 
   // What you're looking at, in words, plus a one-tap reset.
   const parts = [];
-  if (sb.filter !== 'all') parts.push(STATUS.find(([k]) => k === sb.filter)[1].replace(/^\S+ /, '').toLowerCase());
+  if (sb.filter !== 'all') parts.push(STATUS.find(([k]) => k === sb.filter)[1].toLowerCase());
   const lg = sb.leagues.find((l) => l.key === sb.league);
   const leaguesShown = new Set(list.map((g) => g.league)).size;
-  $('#resultLine').innerHTML = `<span>Showing <b>${list.length}</b> ${parts.join(' ')} game${list.length === 1 ? '' : 's'}${lg ? ` in <b>${esc(lg.label)}</b>` : leaguesShown > 1 ? ` across ${leaguesShown} leagues` : ''}${sb.q ? ` matching "<b>${esc(sb.q)}</b>"` : ''}${live && sb.filter !== 'in' ? ` · <span class="live-txt">${live} live now</span>` : ''}</span>${isFiltered() ? '<button type="button" class="clear-btn" data-clear>✕ Clear filters</button>' : ''}`;
+  $('#resultLine').innerHTML = `<span>Showing <b>${list.length}</b> ${parts.join(' ')} game${list.length === 1 ? '' : 's'}${lg ? ` in <b>${esc(lg.label)}</b>` : leaguesShown > 1 ? ` across ${leaguesShown} leagues` : ''}${sb.q ? ` matching "<b>${esc(sb.q)}</b>"` : ''}${live && sb.filter !== 'in' ? ` · <span class="live-txt">${live} live now</span>` : ''}</span>${isFiltered() ? '<button type="button" class="clear-btn" data-clear>Clear filters</button>' : ''}`;
 
   const el = $('#games');
   if (!list.length) {
-    const msgs = sb.q ? [`No games for "${sb.q}" on this date. Maybe they're on a bye. Maybe they're in hiding.`, '🕵️']
-      : sb.filter === 'in' ? ['Nothing live right now. Perfect time to refill the snacks.', '🍿']
-      : ['No games here. The athletes are presumably at brunch.', '🥞'];
-    el.innerHTML = `<div class="empty-state"><div class="big">${msgs[1]}</div><p>${esc(msgs[0])}</p>${isFiltered() ? '<button class="btn primary" type="button" data-clear-empty>Show everything</button>' : ''}</div>`;
+    const msgs = sb.q ? [`No games for "${sb.q}" on this date. Maybe they're on a bye. Maybe they're in hiding.`, '']
+      : sb.filter === 'in' ? ['Nothing live right now. Perfect time to refill the snacks.', '']
+      : ['No games here. The athletes are presumably at brunch.', ''];
+    el.innerHTML = `<div class="empty-state"><p>${esc(msgs[0])}</p>${isFiltered() ? '<button class="btn primary" type="button" data-clear-empty>Show everything</button>' : ''}</div>`;
     const btn = $('[data-clear-empty]', el);
     if (btn) btn.onclick = () => $('#resultLine [data-clear]')?.click();
     return;
@@ -360,7 +362,7 @@ function paintGames(quiet = false) {
     const groups = [];
     for (const l of sb.leagues) {
       const gs = list.filter((g) => g.league === l.key).sort(byState);
-      if (gs.length) groups.push(`<h2 class="league-head">${l.emoji} ${esc(l.label)} <small>${gs.length} game${gs.length > 1 ? 's' : ''}</small></h2><div class="grid">${gs.map(cardHTML).join('')}</div>`);
+      if (gs.length) groups.push(`<h2 class="league-head">${esc(l.label)} <small>${gs.length} game${gs.length > 1 ? 's' : ''}</small></h2><div class="grid">${gs.map(cardHTML).join('')}</div>`);
     }
     el.innerHTML = groups.join('');
   }
@@ -377,11 +379,11 @@ function paintGames(quiet = false) {
 // ---------- spotlight: game of the night + live counters ----------
 function pickSpotlight(games) {
   const live = games.filter((g) => g.status.state === 'in' && g.home && g.away);
-  if (live.length) return { g: [...live].sort((a, b) => b.vibe.chaos - a.vibe.chaos || (b.viewers || 0) - (a.viewers || 0))[0], label: '🔥 GAME OF THE NIGHT' };
+  if (live.length) return { g: [...live].sort((a, b) => b.vibe.chaos - a.vibe.chaos || (b.viewers || 0) - (a.viewers || 0))[0], label: 'Game of the night' };
   const soon = games.filter((g) => g.status.state === 'pre').sort((a, b) => new Date(a.date) - new Date(b.date));
-  if (soon.length) return { g: soon[0], label: '⏳ UP NEXT' };
+  if (soon.length) return { g: soon[0], label: 'Up next' };
   const done = games.filter((g) => g.status.state === 'post').sort((a, b) => b.vibe.chaos - a.vibe.chaos);
-  return done.length ? { g: done[0], label: '🏆 GAME OF THE DAY' } : null;
+  return done.length ? { g: done[0], label: 'Game of the day' } : null;
 }
 
 function countUp(el, to) {
@@ -430,11 +432,11 @@ function paintSpotlight(quiet = false) {
   const g = sp.g, { a, h } = sideColors(g), st = g.status.state;
   const sc = (t) => (st === 'pre' ? '' : esc(t?.score ?? 0));
   const cta = st === 'in'
-    ? `<a class="btn primary" href="#/live/${esc(g.league)}/${esc(g.id)}">🔴 Join the live room${g.viewers ? ` · ${g.viewers} watching` : ''}</a>`
-    : `<a class="btn primary" href="#/game/${esc(g.league)}/${esc(g.id)}">${st === 'pre' ? '🗳️ Make your pick' : '💬 Read the takes'}</a>`;
+    ? `<a class="btn primary" href="#/live/${esc(g.league)}/${esc(g.id)}"><span class="dot"></span>Join the live room${g.viewers ? ` · ${g.viewers} watching` : ''}</a>`
+    : `<a class="btn primary" href="#/game/${esc(g.league)}/${esc(g.id)}">${st === 'pre' ? 'Make your pick' : 'Read the takes'}</a>`;
   card.style.setProperty('--away-c', a); card.style.setProperty('--home-c', h);
   card.innerHTML = `
-    <div class="spot-label">${sp.label} <span>${g.emoji} ${esc(g.leagueLabel)}${g.broadcast ? ` · 📺 ${esc(g.broadcast)}` : ''}</span></div>
+    <div class="spot-label">${sp.label} <span>${esc(g.leagueLabel)}${g.broadcast ? ` · ${esc(g.broadcast)}` : ''}</span></div>
     <div class="spot-main">
       <div class="spot-team">${logo(g.away)}<b class="nm-full">${esc(g.away?.name)}</b><b class="nm-abbr">${esc(g.away?.abbr)}</b><small>${esc(g.away?.record || '')}</small></div>
       <div class="spot-mid">
@@ -459,17 +461,17 @@ function cardHTML(g) {
     const cls = st === 'post' && t && other && t.score !== other.score ? (t.score > other.score ? 'winner' : 'loser') : '';
     return `<div class="teamrow ${cls}">
       ${logo(t)}
-      <div class="tname">${t?.rank ? `<span class="rank">#${t.rank}</span>` : ''}${esc(t?.name || 'TBD')}${cls === 'winner' ? '<span class="crown" aria-label="winner">👑</span>' : ''}<small>${esc(t?.record || '')}</small></div>
+      <div class="tname">${t?.rank ? `<span class="rank">#${t.rank}</span>` : ''}${esc(t?.name || 'TBD')}<small>${esc(t?.record || '')}</small></div>
       <div class="tscore">${st === 'pre' || t?.score == null ? '' : esc(t.score)}</div>
     </div>`;
   };
   const p = g.poll || { home: 0, away: 0 };
   const pt = p.home + p.away;
-  const pollTxt = pt ? `🗳 ${Math.round((Math.max(p.home, p.away) / pt) * 100)}% ${esc((p.home >= p.away ? g.home : g.away)?.abbr)}` : '🗳 no picks yet';
+  const pollTxt = pt ? `${Math.round((Math.max(p.home, p.away) / pt) * 100)}% pick ${esc((p.home >= p.away ? g.home : g.away)?.abbr)}` : 'No picks yet';
   const liveNow = st === 'in';
   const href = liveNow ? `#/live/${esc(g.league)}/${esc(g.id)}` : `#/game/${esc(g.league)}/${esc(g.id)}`;
   return `<a class="card ${liveNow ? 'is-live' : ''}" href="${href}" data-key="${esc(g.league)}:${esc(g.id)}" style="--away-c:${a};--home-c:${h}">
-    <div class="card-top"><span>${g.emoji} ${esc(g.leagueLabel)}${g.broadcast ? ` · ${esc(g.broadcast)}` : ''}</span>${statusLabel(g)}</div>
+    <div class="card-top"><span>${esc(g.leagueLabel)}${g.broadcast ? ` · ${esc(g.broadcast)}` : ''}</span>${statusLabel(g)}</div>
     ${row(g.away, g.home)}
     ${row(g.home, g.away)}
     <span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span>
@@ -477,9 +479,9 @@ function cardHTML(g) {
     ${st === 'pre' ? '' : `<div class="chaos" title="How unhinged this game is"><span>Chaos</span><div class="chaos-bar"><i style="width:${g.vibe.chaos}%"></i></div><span>${g.vibe.chaos}</span></div>`}
     ${fantasyChip(g)}
     ${betChip(g)}
-    <div class="card-foot"><span>💬 ${g.takeCount} take${g.takeCount === 1 ? '' : 's'} · ${pollTxt}</span>${liveNow
-      ? `<span class="enter live-enter">🔴 ${g.viewers ? `${g.viewers} watching · ` : ''}Join live →</span>`
-      : '<span class="enter">Enter the thread →</span>'}</div>
+    <div class="card-foot"><span>${g.takeCount} take${g.takeCount === 1 ? '' : 's'} · ${pollTxt}</span>${liveNow
+      ? `<span class="enter live-enter">${g.viewers ? `${g.viewers} watching · ` : ''}Join live</span>`
+      : '<span class="enter">Open game</span>'}</div>
   </a>`;
 }
 
@@ -501,31 +503,31 @@ const QUICK = ['The refs are blind 🙈', "WE'RE SO BACK 🚀", "It's so over �
 async function renderGame(league, id) {
   const app = $('#app');
   gv.key = `${league}:${id}`; gv.replyTo = null; gv.data = null;
-  app.innerHTML = `<a class="back" href="#/">← Back to the chaos</a><div class="skeleton" style="height:240px"></div>`;
+  app.innerHTML = `<a class="back" href="#/">← Scores</a><div class="skeleton" style="height:240px"></div>`;
   try {
     gv.data = await api(`/game/${league}/${id}`);
   } catch (e) {
-    app.innerHTML = `<a class="back" href="#/">← Back to the chaos</a><div class="empty-state"><div class="big">🕳️</div><p>${esc(e.message)}</p></div>`;
+    app.innerHTML = `<a class="back" href="#/">← Scores</a><div class="empty-state"><p>${esc(e.message)}</p></div>`;
     return;
   }
   gv.social = gv.data.social;
   const d = gv.data, g = d.game;
   const { a, h } = sideColors(g);
   app.innerHTML = `
-    <a class="back" href="#/">← Back to the chaos</a>
+    <a class="back" href="#/">← Scores</a>
     <section class="scorehero" id="hero" style="--away-c:${a};--home-c:${h}"></section>
     <div class="layout">
       <div>
-        <section class="panel"><h3>🎙️ The Intern's Commentary <small>unpaid, unfiltered</small></h3><ul class="intern" id="intern"></ul></section>
-        <section class="panel" id="wpPanel" hidden><h3>📉 The Panic Graph <small>win probability</small></h3><div class="wp" id="wp"></div></section>
+        <section class="panel"><h3>Commentary <small>by the intern</small></h3><ul class="intern" id="intern"></ul></section>
+        <section class="panel" id="wpPanel" hidden><h3>Win probability <small>the panic graph</small></h3><div class="wp" id="wp"></div></section>
         <section class="panel" id="thread">
           <div class="thread-head">
-            <h3>💬 The Thread</h3>
+            <h3>Takes</h3>
             <span class="muted" id="takeCount"></span>
             <span class="spacer"></span>
             <div class="chips" role="group" aria-label="Sort takes">
-              <button class="chip" data-sort="hot" aria-pressed="true">🔥 Hot</button>
-              <button class="chip" data-sort="new" aria-pressed="false">🆕 New</button>
+              <button class="chip" data-sort="hot" aria-pressed="true">Hot</button>
+              <button class="chip" data-sort="new" aria-pressed="false">New</button>
             </div>
           </div>
           <div class="composer">
@@ -533,9 +535,9 @@ async function renderGame(league, id) {
             <div class="chips" style="margin:6px 0 10px">${QUICK.map((q) => `<button type="button" class="chip" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
             <div class="composer-foot">
               <div class="heat" role="group" aria-label="Take temperature">
-                <button type="button" data-heat="mild" aria-pressed="true">🌶 Mild</button>
-                <button type="button" data-heat="spicy" aria-pressed="false">🌶🌶 Spicy</button>
-                <button type="button" data-heat="nuclear" aria-pressed="false">☢️ Nuclear</button>
+                <button type="button" data-heat="mild" aria-pressed="true">Mild</button>
+                <button type="button" data-heat="spicy" aria-pressed="false">Spicy</button>
+                <button type="button" data-heat="nuclear" aria-pressed="false">Nuclear</button>
               </div>
               <span class="counter" id="counter">0/500</span>
               <button class="btn primary" id="postBtn" type="button">Post take</button>
@@ -544,15 +546,15 @@ async function renderGame(league, id) {
           </div>
           <div class="takes" id="takes"></div>
         </section>
-        <section class="panel" id="playsPanel" hidden><h3>📋 Key Plays</h3><ul class="plays" id="plays"></ul></section>
+        <section class="panel" id="playsPanel" hidden><h3>Key Plays</h3><ul class="plays" id="plays"></ul></section>
       </div>
       <aside class="side">
-        <section class="panel"><h3>🗳️ Who Ya Got?</h3><div id="poll"></div></section>
-        <section class="panel"><h3>📣 React</h3><div class="reacts" id="reacts"></div></section>
-        <section class="panel" id="excusePanel"><h3>🙃 Excuse Generator</h3><div id="excuse"></div></section>
-        <section class="panel" id="linesPanel" hidden><h3>🔢 By the Numbers</h3><div class="table-scroll" id="lines"></div></section>
-        <section class="panel" id="tapePanel" hidden><h3>📊 Tale of the Tape</h3><div id="tape"></div></section>
-        <section class="panel" id="leadersPanel" hidden><h3>⭐ Who Showed Up</h3><div class="leaders" id="leaders"></div></section>
+        <section class="panel"><h3>Who wins?</h3><div id="poll"></div></section>
+        <section class="panel"><h3>React</h3><div class="reacts" id="reacts"></div></section>
+        <section class="panel" id="excusePanel"><h3>Excuse Generator</h3><div id="excuse"></div></section>
+        <section class="panel" id="linesPanel" hidden><h3>Box score</h3><div class="table-scroll" id="lines"></div></section>
+        <section class="panel" id="tapePanel" hidden><h3>Team stats</h3><div id="tape"></div></section>
+        <section class="panel" id="leadersPanel" hidden><h3>Top performers</h3><div class="leaders" id="leaders"></div></section>
       </aside>
     </div>`;
 
@@ -580,23 +582,23 @@ function paintGameStatic() {
   const hs = g.home?.score ?? 0, as = g.away?.score ?? 0;
   const lose = (mine, other) => (st === 'post' && mine < other ? 'lose' : '');
   $('#hero').innerHTML = `
-    <div class="sh-meta">${g.emoji} ${esc(g.leagueLabel)}${g.venue ? ` · ${esc(g.venue)}` : ''}${g.broadcast ? ` · 📺 ${esc(g.broadcast)}` : ''}</div>
+    <div class="sh-meta">${esc(g.leagueLabel)}${g.venue ? ` · ${esc(g.venue)}` : ''}${g.broadcast ? ` · ${esc(g.broadcast)}` : ''}</div>
     ${g.note ? `<div class="sh-meta" style="margin-top:2px">${esc(g.note)}</div>` : ''}
     <div class="sh-main">
       <div class="sh-team">${logo(g.away)}<div class="nm">${g.away?.rank ? `#${g.away.rank} ` : ''}${esc(g.away?.full || g.away?.name)}</div><div class="rec">${esc(g.away?.record || '')}</div></div>
       <div>
         <div class="sh-score">${st === 'pre' ? '<span class="dash">VS</span>' : `<span class="${lose(as, hs)}">${esc(as)}</span><span class="dash">–</span><span class="${lose(hs, as)}">${esc(hs)}</span>`}</div>
-        <div class="sh-status ${st === 'in' ? 'live' : ''}">${st === 'in' ? '🔴 ' : ''}${esc(st === 'pre' ? `${new Date(g.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : g.status.detail)}</div>
+        <div class="sh-status ${st === 'in' ? 'live' : ''}">${st === 'in' ? '<span class="dot"></span>' : ''}${esc(st === 'pre' ? `${new Date(g.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : g.status.detail)}</div>
         ${g.situation && st === 'in' ? `<div class="sh-situation">${esc(g.situation)}</div>` : ''}
         ${d.odds && st === 'pre' ? `<div class="sh-situation">Line: ${esc(d.odds)}</div>` : ''}
       </div>
       <div class="sh-team">${logo(g.home)}<div class="nm">${g.home?.rank ? `#${g.home.rank} ` : ''}${esc(g.home?.full || g.home?.name)}</div><div class="rec">${esc(g.home?.record || '')}</div></div>
     </div>
     <div class="sh-badge"><span class="badge ${esc(g.vibe.badgeClass)}">${esc(g.vibe.badge)}</span></div>
-    ${st !== 'post' ? `<div class="sh-badge"><a class="btn primary live-cta" href="#/live/${esc(g.league)}/${esc(g.id)}">${st === 'in' ? '🔴 Join the Live Room' : '📺 Live Room opens at kickoff, get in early'}</a></div>` : ''}`;
+    ${st !== 'post' ? `<div class="sh-badge"><a class="btn primary live-cta" href="#/live/${esc(g.league)}/${esc(g.id)}">${st === 'in' ? 'Join the live room' : 'Live room opens at start time'}</a></div>` : ''}`;
 
   $('#intern').innerHTML = d.commentary.map((line, i) =>
-    `<li><div class="mic">${['🎙️', '🤓', '📢', '🧃', '🫠'][i % 5]}</div><div class="bubble">${esc(line)}</div></li>`).join('');
+    `<li><div class="bubble">${esc(line)}</div></li>`).join('');
 
   // Linescore
   const ls = [g.away?.linescores || [], g.home?.linescores || []];
@@ -688,13 +690,13 @@ function paintPoll() {
   const { a, h } = sideColors(g);
   const closed = st === 'post';
   const btn = (side, t) => `<button class="poll-btn ${p.mine === side ? 'mine' : ''}" data-side="${side}" ${closed ? 'disabled' : ''} aria-pressed="${p.mine === side}">
-      ${logo(t)}<span>${esc(t?.name)}</span>${p.mine === side ? '<small>✅ your pick</small>' : ''}</button>`;
+      ${logo(t)}<span>${esc(t?.name)}</span>${p.mine === side ? '<small>Your pick</small>' : ''}</button>`;
   let note;
   if (closed) {
     const res = (g.home?.score ?? 0) === (g.away?.score ?? 0) ? 'tie' : (g.home.score > g.away.score ? 'home' : 'away');
     note = !p.mine ? 'Polls closed. You didn\'t pick. Coward. (Respectfully.)'
-      : p.mine === res ? '🔮 You called it. Nostradamus who?'
-      : '📉 Your pick has been forwarded to the Bad Takes Department.';
+      : p.mine === res ? 'You called it. Nostradamus who?'
+      : 'Your pick has been forwarded to the Bad Takes Department.';
   } else {
     note = p.mine ? `You're riding with ${esc((p.mine === 'home' ? g.home : g.away)?.name)}. Switch if you dare.` : 'Pick a side. Fence-sitters get splinters.';
   }
@@ -721,7 +723,7 @@ function celebrateIfCalledIt() {
   const flag = `ttl:cele:${gv.key}`;
   if (store.get(flag, false)) return;
   store.set(flag, true);
-  if (p.mine === res) { confetti(220); toast('🔮 YOU CALLED IT. Added to your prophet record.'); }
+  if (p.mine === res) { confetti(220); toast('YOU CALLED IT. Added to your prophet record.'); }
 }
 
 // ---------- reactions ----------
@@ -758,7 +760,7 @@ function paintExcuse() {
   let current = rand(gv.data.excuses);
   const draw = () => {
     $('#excuse').innerHTML = `<div class="excuse"><div class="excuse-who">${esc(who)}</div>"${esc(current)}"</div>
-      <div class="row" style="margin-top:10px"><button class="btn" type="button" id="exNew">🎲 New excuse</button><button class="btn ghost" type="button" id="exPost">Post it →</button></div>`;
+      <div class="row" style="margin-top:10px"><button class="btn" type="button" id="exNew">New excuse</button><button class="btn ghost" type="button" id="exPost">Post it →</button></div>`;
     $('#exNew').onclick = () => { let n; do { n = rand(gv.data.excuses); } while (n === current && gv.data.excuses.length > 1); current = n; draw(); };
     $('#exPost').onclick = () => { const t = $('#takeText'); t.value = `Official excuse: ${current}`; t.focus(); t.dispatchEvent(new Event('input')); t.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   };
@@ -776,7 +778,7 @@ function wireComposer() {
   $('.heat').onclick = (e) => {
     const b = e.target.closest('[data-heat]'); if (!b) return;
     gv.heat = b.dataset.heat; $$('.heat button').forEach((x) => x.setAttribute('aria-pressed', x === b));
-    if (gv.heat === 'nuclear') toast('☢️ Nuclear take armed. Proceed with caution.');
+    if (gv.heat === 'nuclear') toast('Nuclear take armed. Proceed with caution.');
   };
   $('#postBtn').onclick = () => postTake(ta.value, null, ta, $('#postBtn'));
   ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#postBtn').click(); };
@@ -808,10 +810,10 @@ async function postTake(text, parentId, input, btn) {
 }
 
 function takeHTML(c, replies = []) {
-  const heat = { mild: '🌶 mild', spicy: '🌶🌶 spicy', nuclear: '☢️ NUCLEAR' }[c.heat] || '';
-  const tag = (c.fire >= 3 && c.fire >= c.cap * 3 ? '<span class="ratio">🔥 VERIFIED HOT</span>'
-    : c.cap >= 3 && c.cap > c.fire * 2 ? '<span class="ratio clown">🤡 RATIO\'D</span>' : ''
-  ) + (c.receipt ? '<span class="ratio receipt" title="This fan shared a real bet on this game">💸 PUT MONEY ON IT</span>' : '');
+  const heat = { mild: 'Mild', spicy: 'Spicy', nuclear: 'Nuclear' }[c.heat] || '';
+  const tag = (c.fire >= 3 && c.fire >= c.cap * 3 ? '<span class="ratio">Verified hot</span>'
+    : c.cap >= 3 && c.cap > c.fire * 2 ? '<span class="ratio clown">Ratio\'d</span>' : ''
+  ) + (c.receipt ? '<span class="ratio receipt" title="This fan shared a real bet on this game">Put money on it</span>' : '');
   return `<article class="take ${esc(c.heat)}" data-id="${esc(c.id)}">
     <div class="av" aria-hidden="true">${esc(c.avatar || '🙂')}</div>
     <div class="take-body">
@@ -820,8 +822,8 @@ function takeHTML(c, replies = []) {
       <div class="take-actions">
         <button class="tact fire" data-act="fire" aria-pressed="${c.myVote === 'fire'}" title="This take is fire">🔥 ${c.fire}</button>
         <button class="tact cap" data-act="cap" aria-pressed="${c.myVote === 'cap'}" title="This take is cap">🧢 ${c.cap}</button>
-        ${c.parentId ? '' : '<button class="tact" data-act="reply">↩ Reply</button>'}
-        ${c.mine ? '<button class="tact" data-act="del">🗑 Delete</button>' : ''}
+        ${c.parentId ? '' : '<button class="tact" data-act="reply">Reply</button>'}
+        ${c.mine ? '<button class="tact" data-act="del">Delete</button>' : ''}
       </div>
       ${gv.replyTo === c.id ? `<div class="reply-box"><input maxlength="500" placeholder="Clap back, respectfully…" aria-label="Reply" id="replyInput"><button class="btn primary" data-act="sendReply">Send</button></div>` : ''}
       ${replies.length ? `<div class="replies">${replies.map((r) => takeHTML(r)).join('')}</div>` : ''}
@@ -838,7 +840,7 @@ function paintTakes() {
   $('#takeCount').textContent = `${all.length} take${all.length === 1 ? '' : 's'}`;
   const draft = $('#replyInput')?.value || '';
   $('#takes').innerHTML = roots.length ? roots.map((c) => takeHTML(c, kids(c.id))).join('')
-    : `<div class="empty-state" style="padding:24px 10px"><div class="big">🦗</div><p>Crickets. Be the first take, legends start somewhere.</p></div>`;
+    : `<div class="empty-state" style="padding:24px 10px"><p>Crickets. Be the first take, legends start somewhere.</p></div>`;
   const ri = $('#replyInput');
   if (ri) { ri.value = draft; ri.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); postTake(ri.value, gv.replyTo, ri); } }; }
 }
@@ -880,7 +882,7 @@ async function refreshSocial() {
     // Don't yank the thread out from under someone typing a reply.
     const typing = document.activeElement?.id === 'replyInput';
     if (!typing) { gv.social.comments = s.comments; paintTakes(); }
-    if (!typing && s.comments.length > before) toast(`💬 ${s.comments.length - before} new take${s.comments.length - before > 1 ? 's' : ''} just dropped`);
+    if (!typing && s.comments.length > before) toast(`${s.comments.length - before} new take${s.comments.length - before > 1 ? 's' : ''} just dropped`);
   } catch { /* offline blip */ }
 }
 
@@ -889,8 +891,8 @@ async function refreshSocial() {
 // =================================================================
 async function renderHall() {
   const app = $('#app');
-  app.innerHTML = `<h1 class="hero-title">HALL OF <span class="hl">TAKES</span></h1>
-    <p class="hero-sub">The hottest takes, the sharpest prophets, and the clowns who made it all worthwhile.</p>
+  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Hall of Takes</h1>
+    <p class="hero-sub">The hottest takes, the sharpest prophets, and the clowns who made it all worthwhile.</p></div>
     <div class="skeleton" style="height:300px"></div>`;
   let d;
   try { d = await api('/hall'); } catch (e) { app.innerHTML += `<p>${esc(e.message)}</p>`; return; }
@@ -901,20 +903,27 @@ async function renderHall() {
       <p class="take-text">${esc(c.text)}</p>
       <div class="take-meta"><span>🔥 ${c.fire} · 🧢 ${c.cap}</span><a class="take-link" href="${c.gameKey.startsWith('fl:') ? '#/fantasy' : `#/game/${esc(c.gameKey.replace(':', '/'))}`}">${esc(c.gameLabel)} →</a></div></div></article>`;
   const empty = (msg) => `<p class="muted">${msg}</p>`;
-  app.innerHTML = `<h1 class="hero-title">HALL OF <span class="hl">TAKES</span></h1>
-    <p class="hero-sub">${d.totals.takes} takes across ${d.totals.games} games. The hottest takes, the sharpest prophets, and the clowns who made it all worthwhile.</p>
+  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Hall of Takes</h1>
+    <p class="hero-sub">${d.totals.takes} take${d.totals.takes === 1 ? '' : 's'} across ${d.totals.games} games.</p></div>
     <div class="hall-grid">
-      <section class="panel"><h3>🔥 Hottest Takes of All Time <small>by fire minus cap</small></h3>
+      <section class="panel"><h3>Hottest takes <small>by fire minus cap</small></h3>
         ${d.topTakes.length ? d.topTakes.map(takeRow).join('') : empty('No takes yet. Go start some drama in a game thread.')}</section>
       <div>
-        <section class="panel"><h3>👑 Take Masters</h3>${d.takeMasters.length ? `<ol class="board">${d.takeMasters.map((u) => userRow(u, `🔥${u.fire} · 🧢${u.cap}`)).join('')}</ol>` : empty('Nobody yet. The throne is empty.')}</section>
-        <section class="panel"><h3>🔮 Prophets <small>poll picks that hit</small></h3>${d.prophets.length ? `<ol class="board">${d.prophets.map((u) => userRow(u, `${u.right}-${u.wrong}`)).join('')}</ol>` : empty('Pick winners in game polls. Finished games get scored here.')}</section>
-        <section class="panel"><h3>🤡 Clown Corner <small>most capped takes</small></h3>${d.clowns.length ? d.clowns.map(takeRow).join('') : empty('No clowns yet. Give it time.')}</section>
+        <section class="panel"><h3>Take masters</h3>${d.takeMasters.length ? `<ol class="board">${d.takeMasters.map((u) => userRow(u, `🔥${u.fire} · 🧢${u.cap}`)).join('')}</ol>` : empty('Nobody yet. The throne is empty.')}</section>
+        <section class="panel"><h3>Prophets <small>poll picks that hit</small></h3>${d.prophets.length ? `<ol class="board">${d.prophets.map((u) => userRow(u, `${u.right}-${u.wrong}`)).join('')}</ol>` : empty('Pick winners in game polls. Finished games get scored here.')}</section>
+        <section class="panel"><h3>Clown corner <small>most capped takes</small></h3>${d.clowns.length ? d.clowns.map(takeRow).join('') : empty('No clowns yet. Give it time.')}</section>
       </div>
     </div>`;
 }
 
 // ---------- boot ----------
+// Delegated handlers (no inline JS, so the Content-Security-Policy can forbid it).
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.dataset.fallback) return;
+  img.replaceWith(Object.assign(document.createElement('div'), { className: 'logo-fallback', textContent: img.dataset.fallback }));
+}, true);
+document.addEventListener('click', (e) => { if (e.target.closest('[data-retry]')) route(); });
 paintMe();
 $('#meChip').onclick = openMeDialog;
 window.addEventListener('hashchange', route);

@@ -24,19 +24,19 @@ const mutedNames = () => new Set(store.get('ttl:muted', []));
 // ---------- lobby ----------
 async function renderLiveLobby() {
   const app = $('#app');
-  app.innerHTML = `<h1 class="hero-title">🔴 LIVE <span class="hl">ROOMS</span></h1>
-    <p class="hero-sub">Keep the game on your TV. This is the couch: live chat, reaction bursts, and calls with bragging rights.</p>
+  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Live Rooms</h1>
+    <p class="hero-sub">Keep the game on your TV. This is the couch: live chat, reactions, and calls with bragging rights.</p></div>
     <div id="lobby"><div class="grid">${'<div class="skeleton"></div>'.repeat(3)}</div></div>`;
   const paint = async () => {
     let games;
     try { ({ games } = await api(`/scoreboard?league=all&date=${ymd(new Date())}`)); }
-    catch (e) { $('#lobby').innerHTML = `<div class="empty-state"><div class="big">📡</div><p>${esc(e.message)}</p></div>`; return; }
+    catch (e) { $('#lobby').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; return; }
     const live = games.filter((g) => g.status.state === 'in').sort((x, y) => (y.viewers || 0) - (x.viewers || 0) || y.vibe.chaos - x.vibe.chaos);
     const soon = games.filter((g) => g.status.state === 'pre' && new Date(g.date) - Date.now() < 4 * 3600e3).sort((x, y) => new Date(x.date) - new Date(y.date));
     $('#lobby').innerHTML = (live.length
-      ? `<h2 class="league-head">🔴 On now <small>${live.length} room${live.length > 1 ? 's' : ''}</small></h2><div class="grid">${live.map(cardHTML).join('')}</div>`
-      : `<div class="empty-state"><div class="big">😴</div><p>Nothing live right now. The athletes are napping. So should you.</p></div>`)
-      + (soon.length ? `<h2 class="league-head">⏳ Starting soon <small>rooms open at kickoff</small></h2><div class="grid">${soon.map(cardHTML).join('')}</div>` : '');
+      ? `<h2 class="league-head">On now <small>${live.length} room${live.length > 1 ? 's' : ''}</small></h2><div class="grid">${live.map(cardHTML).join('')}</div>`
+      : `<div class="empty-state"><p>Nothing live right now. The athletes are napping. So should you.</p></div>`)
+      + (soon.length ? `<h2 class="league-head">Starting soon <small>rooms open at kickoff</small></h2><div class="grid">${soon.map(cardHTML).join('')}</div>` : '');
   };
   await paint();
   every(paint, 30000);
@@ -51,7 +51,7 @@ function renderLive(league, id) {
   const app = $('#app');
   app.innerHTML = `
     <div class="live-top"><a class="back" href="#/live">← All live rooms</a>
-      <span class="live-top-r"><button type="button" class="btn ghost demo-btn" id="demoBtn" title="Fill the room with clearly-labelled simulated fans, for demos">🧪 Simulate a crowd</button>
+      <span class="live-top-r"><button type="button" class="btn ghost demo-btn" id="demoBtn" title="Fill the room with clearly-labelled simulated fans, for demos">Simulate a crowd</button>
       <a class="back" href="#/game/${esc(league)}/${esc(id)}">Game page &amp; thread →</a></span></div>
     <div class="live-wrap">
       <section class="stage-col">
@@ -62,19 +62,19 @@ function renderLive(league, id) {
         </div>
         <section class="panel mpoll-panel" id="mpollPanel" hidden></section>
         <div class="stage-panels">
-          <section class="panel pbp-panel" id="pbpPanel"><h3>📋 Play-by-Play <small><label class="follow"><input type="checkbox" id="followTog" checked> Follow live</label></small></h3><ol class="pbp" id="pbp"></ol></section>
-          <section class="panel" id="callPanel"><h3>🔮 The Call <small>bragging rights only</small></h3><div id="call"></div></section>
-          <section class="panel" id="fzPanel" hidden><h3>🧑‍🌾 Your Fantasy Guys</h3><div id="fzLive"></div></section>
-          <section class="panel bt-panel" id="btPanel" hidden><h3>💸 Your Action <small>only you can see this</small></h3><div id="btLive"></div></section>
+          <section class="panel pbp-panel" id="pbpPanel"><h3>Play-by-Play <small><label class="follow"><input type="checkbox" id="followTog" checked> Follow live</label></small></h3><ol class="pbp" id="pbp"></ol></section>
+          <section class="panel" id="callPanel"><h3>The Call <small>bragging rights only</small></h3><div id="call"></div></section>
+          <section class="panel" id="fzPanel" hidden><h3>Your Fantasy Guys</h3><div id="fzLive"></div></section>
+          <section class="panel bt-panel" id="btPanel" hidden><h3>Your Action <small>only you can see this</small></h3><div id="btLive"></div></section>
         </div>
       </section>
       <aside class="chat-col">
         <div class="chat-head">
           <div class="chips" role="tablist">
-            <button class="chip" role="tab" data-tab="chat" aria-pressed="true">💬 Chat</button>
-            <button class="chip" role="tab" data-tab="callers" aria-pressed="false">👑 Callers</button>
+            <button class="chip" role="tab" data-tab="chat" aria-pressed="true">Chat</button>
+            <button class="chip" role="tab" data-tab="callers" aria-pressed="false">Callers</button>
           </div>
-          <span class="viewers" id="viewers">👀 –</span>
+          <span class="viewers" id="viewers">–</span>
         </div>
         <div class="chat-log" id="chatLog" aria-live="polite"></div>
         <div class="callers" id="callers" hidden></div>
@@ -103,7 +103,7 @@ function connectLive() {
     let ev; try { ev = JSON.parse(m.data); } catch { return; }
     onLiveEvent(ev);
   };
-  es.onerror = () => { if (lv.es === es) $('#viewers') && ($('#viewers').textContent = '📡 reconnecting…'); };
+  es.onerror = () => { if (lv.es === es) $('#viewers') && ($('#viewers').textContent = 'Reconnecting…'); };
 }
 
 function onLiveEvent(ev) {
@@ -152,8 +152,8 @@ function paintStage() {
   el.dataset.sport = g.sport;
   $('#stTop', el).innerHTML = `
     ${st === 'in' ? '<span class="live-pill"><span class="dot"></span>LIVE</span>' : st === 'post' ? '<span class="live-pill off">FINAL</span>' : '<span class="live-pill off">SOON</span>'}
-    <span>${g.emoji} ${esc(g.leagueLabel)}</span>
-    ${g.broadcast ? `<span class="tv">📺 Watch on ${esc(g.broadcast)}</span>` : ''}`;
+    <span>${esc(g.leagueLabel)}</span>
+    ${g.broadcast ? `<span class="tv">Watch on ${esc(g.broadcast)}</span>` : ''}`;
   paintStageDemo();
   const wp = g.winProb?.length ? g.winProb[g.winProb.length - 1] : null;
   const wpTxt = wp == null || st !== 'in' ? '' : wp >= 50 ? `${esc(g.home.abbr)} ${Math.round(wp)}% to win` : `${esc(g.away.abbr)} ${Math.round(100 - wp)}% to win`;
@@ -203,7 +203,7 @@ function paintTug() {
   const lead = knob > 56 ? 'home' : knob < 44 ? 'away' : null;
   const { a, h } = sideColors(g);
   if (!$('.tug-track', el)) {
-    el.innerHTML = `<div class="tug-head"><b>📣 HYPE BATTLE</b><span>Who's got the juice? Tap your team. The meter goes to the loudest fans.</span></div>
+    el.innerHTML = `<div class="tug-head"><b>Hype battle</b><span>Who's got the juice? Tap your team. The meter goes to the loudest fans.</span></div>
       <div class="tug-row">
         <button type="button" class="tug-btn" data-hype="away" style="--c:${a}">${logo(g.away)}<span>HYPE<b>${esc(g.away?.abbr)}</b></span></button>
         <div class="tug-track"><i class="tug-fill"></i><span class="tug-mid"></span><span class="tug-knob">🔥</span></div>
@@ -349,7 +349,7 @@ function paintCall() {
   el.innerHTML = `<div class="call-q">${esc(c.question)}</div>
     <div class="poll-btns">${btn('away')}${btn('home')}</div>
     <div class="poll-note">${lv.myPick
-      ? (left > 0 ? `⏳ Your call counts in <b id="lockLeft">${left}s</b>. No sniping, we see you.` : '✅ Your call is locked in. Now sweat.')
+      ? (left > 0 ? `Your call counts in <b id="lockLeft">${left}s</b>. No sniping, we see you.` : 'Your call is locked in. Now sweat.')
       : 'Pick before it happens. Calls need to be in 45s early to count.'}</div>`;
 }
 
@@ -360,14 +360,14 @@ function paintCallers() {
     : '<p class="muted" style="padding:12px">No callers yet. Make a call on the left and get on the board.</p>';
 }
 function paintViewers() {
-  const v = $('#viewers'); if (v) v.textContent = `👀 ${lv.viewers} watching${lv.demo ? ` · 🧪 ${lv.demo} sim` : ''}`;
+  const v = $('#viewers'); if (v) v.textContent = `${lv.viewers} watching${lv.demo ? ` · ${lv.demo} sim` : ''}`;
   const b = $('#demoBtn');
-  if (b) { b.textContent = lv.demo ? '🧪 Demo crowd on · turn off' : '🧪 Simulate a crowd'; b.classList.toggle('on', !!lv.demo); }
+  if (b) { b.textContent = lv.demo ? 'Demo crowd on · turn off' : 'Simulate a crowd'; b.classList.toggle('on', !!lv.demo); }
 }
 function paintStageDemo() {
   const top = $('.stage-top'); if (!top) return;
   let pill = $('.demo-pill', top);
-  if (lv.demo && !pill) top.insertAdjacentHTML('beforeend', '<span class="demo-pill" title="Simulated fans are in this room">🧪 DEMO CROWD</span>');
+  if (lv.demo && !pill) top.insertAdjacentHTML('beforeend', '<span class="demo-pill" title="Simulated fans are in this room">Demo crowd</span>');
   if (!lv.demo && pill) pill.remove();
 }
 
@@ -415,7 +415,7 @@ function wireLive() {
     try {
       const r = await api(`/live/${lv.league}/${lv.id}/demo`, { method: 'POST', body: { on: !lv.demo } });
       lv.demo = r.demo; paintViewers(); paintStageDemo();
-      if (lv.demo) toast('🧪 Demo crowd on. Every simulated fan is tagged SIM.');
+      if (lv.demo) toast('Demo crowd on. Every simulated fan is tagged SIM.');
     } catch (e) { toast(e.message, true); }
   };
   const log = $('#chatLog');

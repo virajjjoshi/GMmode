@@ -6,7 +6,7 @@ async function renderTour() {
   const app = $('#app');
   app.innerHTML = `
     <section class="tour-hero">
-      <div class="tour-kicker">v0.3 · built ${esc(new Date().toLocaleDateString([], { month: 'long', year: 'numeric' }))}</div>
+      <div class="tour-kicker">v1.0 ·  ${esc(new Date().toLocaleDateString([], { month: 'long', year: 'numeric' }))}</div>
       <h1 class="tour-title">THE SECOND SCREEN<br>FOR <span class="hl">SPORTS FANS</span></h1>
       <p class="tour-sub">Keep the game on your TV. Trash Talk Live is the couch: live scores with a funny take on every game, Twitch-style live rooms, fantasy wired in, and prediction games for bragging rights.</p>
       <div class="stats tour-stats">
@@ -22,25 +22,25 @@ async function renderTour() {
     <h2 class="tour-h2">What's working today</h2>
     <div class="tour-grid">
       <article class="tour-card" style="--tc:var(--accent)">
-        <div class="tc-ico">🏟️</div><h3>Scoreboard of Chaos</h3>
+        <h3>Scores</h3>
         <p>Live scores across 10 leagues. Every game gets a vibe badge and a chaos meter that reads the score, the clock, and the standings.</p>
         <div class="tc-demo" id="tdScores"></div>
         <a class="tc-link" href="#/">See every game →</a>
       </article>
       <article class="tour-card" style="--tc:var(--orange)">
-        <div class="tc-ico">🎙️</div><h3>The Humor Engine</h3>
+        <h3>The Humor Engine</h3>
         <p>An "unpaid intern" writes a joke for every game state: nail-biters, blowouts, upsets, overtime. These are live, from tonight's games:</p>
         <div class="tc-demo tc-quote" id="tdJokes"><span class="typing"></span></div>
         <a class="tc-link" href="#/?sort=chaos">Most chaotic games →</a>
       </article>
       <article class="tour-card" style="--tc:var(--hot)">
-        <div class="tc-ico">🔴</div><h3>Live Rooms</h3>
+        <h3>Live Rooms</h3>
         <p>A Twitch-style room for every game: a live field drawn for each sport (the football chains move, basketball shot charts, a baseball diamond with runners), tappable play-by-play, a Hype Battle tug-of-war, quick polls like "4th down: go for it?", and big moments like TIP-OFF and RED ZONE.</p>
         <div class="tc-demo" id="tdLive"></div>
         <a class="tc-link" id="tdLiveLink" href="#/live">Open the live rooms →</a>
       </article>
       <article class="tour-card" style="--tc:var(--purple)">
-        <div class="tc-ico">🔮</div><h3>The Call &amp; Polls</h3>
+        <h3>The Call &amp; Polls</h3>
         <p>"Who scores next?" calls in every live room, and a "Who Ya Got?" poll on every game. Points for being right, extra for beating the crowd.</p>
         <div class="tc-demo tc-rules">
           <div><b>+10</b><span>for a right call</span></div>
@@ -50,13 +50,13 @@ async function renderTour() {
         <a class="tc-link" href="#/hall">Prophet leaderboard →</a>
       </article>
       <article class="tour-card" style="--tc:var(--good)">
-        <div class="tc-ico">🧑‍🌾</div><h3>Fantasy, Connected</h3>
+        <h3>Fantasy, Connected</h3>
         <p>Plug in a Sleeper username to get your live matchup, the Fantasy Therapist, bench regret, standings and a league trash-talk thread. Your players are flagged on every game card.</p>
         <div class="tc-demo" id="tdFantasy"></div>
         <a class="tc-link" href="#/fantasy">Connect a league →</a>
       </article>
       <article class="tour-card" style="--tc:var(--cool)">
-        <div class="tc-ico">💬</div><h3>Threads &amp; Hall of Takes</h3>
+        <h3>Threads &amp; Hall of Takes</h3>
         <p>Every game has its own forum. Rate your take Mild, Spicy or ☢️ Nuclear, and the crowd votes 🔥 fire or 🧢 cap. The best and worst land in the Hall of Takes.</p>
         <div class="tc-demo" id="tdTakes"></div>
         <a class="tc-link" href="#/hall">Hall of Takes →</a>
@@ -72,7 +72,7 @@ async function renderTour() {
         ['🛡️', 'Safe by default', 'Rate limits, slow mode, profanity softening, input validation, and all user text escaped (no XSS).'],
         ['📱', 'Works on phones', 'Responsive down to phone width, and tested by driving real Chrome on desktop and mobile.'],
         ['🧪', 'Demo crowd', 'One click fills a room with clearly labelled simulated fans, to show how it feels at scale.'],
-      ].map(([i, t, d]) => `<div class="tech"><span>${i}</span><div><b>${t}</b><p>${d}</p></div></div>`).join('')}
+      ].map(([i, t, d]) => `<div class="tech"><div><b>${t}</b><p>${d}</p></div></div>`).join('')}
     </div>
 
     <h2 class="tour-h2">Where it's going</h2>
@@ -85,7 +85,7 @@ async function renderTour() {
     </ol>
 
     <section class="panel tour-decide">
-      <h3>🧭 Decisions for us</h3>
+      <h3>Decisions for us</h3>
       <ol>
         <li><b>Name:</b> "Trash Talk Live" or "GMmode"?</li>
         <li><b>Next build:</b> real accounts first (recommended) or more fantasy platforms?</li>
@@ -121,7 +121,7 @@ async function renderTour() {
     : '<p class="muted">No games live right now. Rooms open automatically at kickoff.</p>';
   if (hot) {
     $('#tdLiveLink').href = `#/live/${hot.league}/${hot.id}`; $('#tdLiveLink').textContent = 'Jump into the hottest room →';
-    $('#tourCta').insertAdjacentHTML('beforeend', `<a class="btn ghost" href="#/live/${esc(hot.league)}/${esc(hot.id)}">🔴 Hottest live room: ${esc(hot.away.abbr)} @ ${esc(hot.home.abbr)}</a>`);
+    $('#tourCta').insertAdjacentHTML('beforeend', `<a class="btn ghost" href="#/live/${esc(hot.league)}/${esc(hot.id)}">Hottest live room: ${esc(hot.away.abbr)} @ ${esc(hot.home.abbr)}</a>`);
   }
 
   // Fantasy preview.

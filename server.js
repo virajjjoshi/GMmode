@@ -7,8 +7,8 @@ if (typeof fetch !== 'function') {
 }
 
 const http = require('node:http');
-const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 const espn = require('./lib/espn');
 const store = require('./lib/store');
 const humor = require('./lib/humor');
@@ -17,16 +17,57 @@ const fantasy = require('./lib/fantasy');
 const predict = require('./lib/predict');
 const bets = require('./lib/bets').createBets({ users: store.getUser });
 store.setReceiptCheck(bets.service.hasReceipt);
+const statics = require('./lib/static').createStatic(path.join(__dirname, 'public'));
 
+// ---------- config (all optional; see .env.example) ----------
 const PORT = Number(process.env.PORT) || 4321;
-const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
+const HOST = process.env.HOST || '0.0.0.0';
+const PROD = process.env.NODE_ENV === 'production';
+// Behind a load balancer (Fly, Render, Railway, nginx) the socket address is the
+// proxy's. TRUST_PROXY=1 reads the client IP from X-Forwarded-For instead, so
+// rate limits apply per fan, not per proxy. Only set it when a proxy is in front.
+const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.TRUST_PROXY || '');
+const STARTED = Date.now();
+
+// Sent on every response. The CSP allows Google Fonts and HTTPS images (team
+// logos from ESPN, avatars from Sleeper) and nothing inline for scripts.
+const CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  'font-src https://fonts.gstatic.com', "img-src 'self' data: https:", "connect-src 'self'", "manifest-src 'self'",
+  "worker-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
+].join('; ');
+function securityHeaders(req) {
+  const h = {
+    'content-security-policy': CSP,
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'x-frame-options': 'DENY',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'cross-origin-opener-policy': 'same-origin',
+  };
+  if (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted) h['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
+  return h;
+}
+
+function clientIp(req) {
+  if (TRUST_PROXY) {
+    const fwd = String(req.headers['fly-client-ip'] || req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (fwd.length) return req.headers['fly-client-ip'] ? fwd[0] : fwd[fwd.length - 1]; // the hop our proxy added
+  }
+  return req.socket.remoteAddress || 'x';
+}
 
 // ---------- helpers ----------
 function send(res, code, body) {
-  const json = JSON.stringify(body);
-  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(json);
+  let out = Buffer.from(JSON.stringify(body));
+  const h = { ...res.baseHeaders, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', vary: 'Accept-Encoding' };
+  // Scoreboards are ~100 KB of JSON; gzip makes them ~10x smaller on phones.
+  if (out.length > 1024 && /\bgzip\b/.test(String(res.req?.headers['accept-encoding'] || ''))) {
+    out = zlib.gzipSync(out, { level: 6 }); h['content-encoding'] = 'gzip';
+  }
+  h['content-length'] = out.length;
+  res.writeHead(code, h);
+  res.end(out);
 }
 class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const bad = (msg) => new HttpError(400, msg);
@@ -59,6 +100,17 @@ function limit(ip, key, max, windowMs) {
 }
 setInterval(() => { const now = Date.now(); for (const [k, v] of buckets) if (!v.some((t) => now - t < 60_000)) buckets.delete(k); }, 60_000).unref();
 
+// Coarse per-IP ceiling on all API traffic (fixed one-minute windows), so one
+// misbehaving client or scraper can't starve everyone else.
+const API_PER_MIN = Number(process.env.API_RATE_PER_MIN) || 600;
+const windows = new Map();
+function underCeiling(ip) {
+  const w = Math.floor(Date.now() / 60_000), e = windows.get(ip);
+  if (!e || e.w !== w) { windows.set(ip, { w, n: 1 }); return true; }
+  return ++e.n <= API_PER_MIN;
+}
+setInterval(() => { const w = Math.floor(Date.now() / 60_000); for (const [k, e] of windows) if (e.w < w) windows.delete(k); }, 60_000).unref();
+
 function withVibe(g) {
   store.noteGame(g);
   return { ...g, vibe: humor.vibe(g) };
@@ -68,7 +120,8 @@ function ymd(d) { return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(
 
 // ---------- API ----------
 async function api(req, res, url) {
-  const ip = req.socket.remoteAddress || 'x';
+  const ip = clientIp(req);
+  if (!underCeiling(ip)) throw new HttpError(429, 'Too many requests. Give it a minute.');
   const uid = req.headers['x-fan-id'];
   const me = isUid(uid) ? uid : null;
   const parts = url.pathname.split('/').filter(Boolean).slice(1); // drop "api"
@@ -242,40 +295,56 @@ function social(key, me) {
   return { poll: store.pollView(key, me), reactions: store.reactionsView(key), comments: store.listComments(key, me) };
 }
 
-// ---------- static ----------
-function serveStatic(req, res, url) {
-  let p = decodeURIComponent(url.pathname);
-  if (p === '/') p = '/index.html';
-  const file = path.normalize(path.join(PUBLIC, p));
-  if (!file.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      // SPA fallback
-      return fs.readFile(path.join(PUBLIC, 'index.html'), (e2, html) => {
-        res.writeHead(e2 ? 404 : 200, { 'content-type': MIME['.html'] }); res.end(html || 'Not found');
-      });
-    }
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
-    res.end(data);
-  });
-}
-
+// ---------- server ----------
 const server = http.createServer(async (req, res) => {
+  const t0 = Date.now();
+  res.baseHeaders = securityHeaders(req);
   const url = new URL(req.url, 'http://localhost');
+
+  if (url.pathname === '/healthz') {
+    return send(res, 200, { ok: true, uptime: Math.round((Date.now() - STARTED) / 1000), build: statics.buildHash(), live: live.stats(), memMB: Math.round(process.memoryUsage().rss / 1048576) });
+  }
+
   if (url.pathname.startsWith('/api/')) {
     try { await api(req, res, url); }
     catch (e) {
       const code = e.code && Number.isInteger(e.code) ? e.code : 502;
-      if (code >= 500) console.error(e.message);
-      send(res, code, { error: code >= 500 ? 'The sports gods are offline. Try again in a sec.' : e.message });
+      if (code >= 500) console.error(`[api] ${req.method} ${url.pathname} -> ${code}: ${e.message}`);
+      if (!res.headersSent) send(res, code, { error: code >= 500 ? 'The sports gods are offline. Try again in a sec.' : e.message });
+      else res.end();
     }
+    const ms = Date.now() - t0;
+    if (ms > 2000 && !url.pathname.endsWith('/stream')) console.warn(`[slow] ${req.method} ${url.pathname} ${ms}ms`);
     return;
   }
-  serveStatic(req, res, url);
+  statics.serve(req, res, url, res.baseHeaders);
+});
+// Load balancers keep connections open ~60s; outlast them so they don't hit a closed socket.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+
+server.listen(PORT, HOST, () => {
+  console.log(`\n  Trash Talk Live is up at http://localhost:${PORT}${PROD ? ' (production)' : ''}\n`);
+  predict.start();
 });
 
-server.listen(PORT, () => {
-  console.log(`\n  🏟️  Trash Talk Live is up at http://localhost:${PORT}\n`);
-  predict.start();
-  process.on('exit', bets.flush);
-});
+// ---------- lifecycle ----------
+// On deploy/restart the platform sends SIGTERM: stop taking requests, end live
+// streams (clients reconnect to the new instance), and write every store to disk.
+let stopping = false;
+function flushAll() {
+  for (const [name, fn] of [['takes', store.flush], ['predict', predict.flush], ['bets', bets.flush]]) {
+    try { fn(); } catch (e) { console.error(`[shutdown] ${name} save failed: ${e.message}`); }
+  }
+}
+function shutdown(sig) {
+  if (stopping) return; stopping = true;
+  console.log(`[shutdown] ${sig}: saving data and closing`);
+  server.close(() => { flushAll(); process.exit(0); });
+  live.closeAll();
+  server.closeIdleConnections?.();
+  setTimeout(() => { flushAll(); process.exit(0); }, 8000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e));

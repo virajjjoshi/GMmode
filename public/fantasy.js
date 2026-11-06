@@ -24,15 +24,15 @@ function fantasyChip(g) {
   if (!guys.length) return '';
   const names = guys.map((p) => p.name.split(' ').slice(-1)[0]).join(', ');
   const pts = guys.reduce((a, p) => a + (p.points || 0), 0);
-  return `<div class="fz-chip" title="Your fantasy starters in this game">🧑‍🌾 Your guys: <b>${esc(names)}</b>${g.status.state !== 'pre' ? ` · ${pts.toFixed(1)} pts` : ''}</div>`;
+  return `<div class="fz-chip" title="Your fantasy starters in this game">Your guys: <b>${esc(names)}</b>${g.status.state !== 'pre' ? ` · ${pts.toFixed(1)} pts` : ''}</div>`;
 }
 
 // ---------- page ----------
 async function renderFantasy() {
   const f = fantasyLink();
   const app = $('#app');
-  app.innerHTML = `<h1 class="hero-title">FANTASY, BUT <span class="hl">FUNNIER</span></h1>
-    <p class="hero-sub">Connect your league. We'll show your matchup, point out your bench mistakes, and give you a place to trash-talk your league-mates.</p>
+  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Fantasy</h1>
+    <p class="hero-sub">Connect your league. We'll show your matchup, point out your bench mistakes, and give you a place to trash-talk your league-mates.</p></div>
     <div id="fz"></div>`;
   if (!f?.userId) return paintConnect();
   if (!f.leagueId) return paintLeaguePicker();
@@ -41,9 +41,9 @@ async function renderFantasy() {
 
 function paintConnect(prefill = '') {
   $('#fz').innerHTML = `<section class="panel fz-connect">
-    <h3>🔌 Connect a league</h3>
+    <h3>Connect a league</h3>
     <div class="chips" role="tablist" style="margin-bottom:14px">
-      <button class="chip" aria-pressed="true">🌙 Sleeper</button>
+      <button class="chip" aria-pressed="true">Sleeper</button>
       <button class="chip empty" data-soon="ESPN">ESPN · soon</button>
       <button class="chip empty" data-soon="Yahoo">Yahoo · soon</button>
     </div>
@@ -81,7 +81,7 @@ function paintLeaguePicker() {
     <h3>${f.avatar ? `<img class="fz-av" src="${esc(f.avatar)}" alt="">` : '🌙'} Hey ${esc(f.userName)}, pick a league <small><button class="linkish" id="fzOut">not you?</button></small></h3>
     ${old && f.leagues.length ? `<p class="muted">No ${esc(f.currentSeason)} leagues yet, so here's ${esc(f.season)}. Did you even renew?</p>` : ''}
     ${f.leagues.length ? `<div class="fz-leagues">${f.leagues.map((l, i) => `<button class="fz-league" data-i="${i}">${l.avatar ? `<img src="${esc(l.avatar)}" alt="">` : '<span class="fz-ph">🏈</span>'}<span><b>${esc(l.name)}</b><small>${l.size}-team · ${esc(l.season)}</small></span></button>`).join('')}</div>`
-      : '<div class="empty-state"><div class="big">🫥</div><p>No leagues found on this account. Your league-mates may have kicked you out. (Or it\'s just a new account.)</p></div>'}
+      : '<div class="empty-state"><p>No leagues found on this account. Your league-mates may have kicked you out. (Or it\'s just a new account.)</p></div>'}
   </section>`;
   $('#fzOut').onclick = () => { setFantasyLink(null); paintConnect(); };
   $$('.fz-league').forEach((b) => { b.onclick = () => pickLeague(f.leagues[+b.dataset.i]); });
@@ -107,7 +107,7 @@ async function paintLeague() {
       loadNflLive(),
     ]);
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="big">🧯</div><p>${esc(e.message)}</p><button class="btn" id="fzReset">Pick a different league</button></div>`;
+    el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p><button class="btn" id="fzReset">Pick a different league</button></div>`;
     $('#fzReset').onclick = () => { setFantasyLink({ ...f, leagueId: null }); renderFantasy(); };
     return;
   }
@@ -118,7 +118,7 @@ async function paintLeague() {
 
   const playerRow = (p) => {
     const g = p.team && fz.nflLive[p.team];
-    const tag = g?.status.state === 'in' ? `<a class="fz-live" href="#/live/nfl/${esc(g.id)}" title="Playing now. Join the live room">🔴 LIVE</a>`
+    const tag = g?.status.state === 'in' ? `<a class="fz-live" href="#/live/nfl/${esc(g.id)}" title="Playing now. Join the live room">LIVE</a>`
       : g?.status.state === 'pre' ? `<span class="fz-when">${esc(fmtTime(g.date))}</span>` : '';
     return `<li class="${p.empty ? 'empty' : ''}"><span class="pos pos-${esc(p.pos)}">${esc(p.pos)}</span>
       <span class="pl">${esc(p.name)} <small class="muted">${esc(p.team || '')}</small>${p.inj ? ` <span class="inj">${esc(p.inj)}</span>` : ''} ${tag}</span>
@@ -145,19 +145,19 @@ async function paintLeague() {
     </section>` : ''}
     <div class="layout">
       <div>
-        <section class="panel"><h3>🛋️ The Fantasy Therapist</h3><ul class="intern"><li><div class="mic">🧠</div><div class="bubble">${esc(d.therapist)}</div></li>
-          ${d.regret ? `<li><div class="mic">🪑</div><div class="bubble"><b>Bench regret:</b> ${esc(d.regret.benched.name)} scored ${d.regret.benched.points.toFixed(1)} on your bench while ${esc(d.regret.started.name)} gave you ${d.regret.started.points.toFixed(1)}. That's ${d.regret.diff} points you left on the couch.</div></li>` : ''}</ul></section>
-        ${me_ ? `<section class="panel"><h3>📋 Lineups</h3><div class="fz-lineups">${lineup(me_, 'You')}${lineup(opp, 'Them')}</div></section>` : ''}
-        <section class="panel"><h3>💬 League Trash Talk <small>for ${esc(d.league.name)} only</small></h3>
+        <section class="panel"><h3>Fantasy therapist</h3><ul class="intern"><li><div class="bubble">${esc(d.therapist)}</div></li>
+          ${d.regret ? `<li><div class="bubble"><b>Bench regret:</b> ${esc(d.regret.benched.name)} scored ${d.regret.benched.points.toFixed(1)} on your bench while ${esc(d.regret.started.name)} gave you ${d.regret.started.points.toFixed(1)}. That's ${d.regret.diff} points you left on the couch.</div></li>` : ''}</ul></section>
+        ${me_ ? `<section class="panel"><h3>Lineups</h3><div class="fz-lineups">${lineup(me_, 'You')}${lineup(opp, 'Them')}</div></section>` : ''}
+        <section class="panel"><h3>League Trash Talk <small>for ${esc(d.league.name)} only</small></h3>
           <div class="composer"><textarea id="flText" maxlength="500" placeholder="Talk your talk. @ your opponent. Bring receipts."></textarea>
             <div class="composer-foot"><span class="posting-as">Posting as ${esc(me.avatar)} <b>${esc(me.name)}</b></span><span class="counter"></span><button class="btn primary" id="flPost">Post</button></div></div>
           <div class="takes" id="flTakes"></div></section>
       </div>
       <aside class="side">
-        <section class="panel"><h3>🏆 Standings</h3><table class="lines fz-stand"><thead><tr><th>Team</th><th>W-L</th><th>PF</th></tr></thead><tbody>
+        <section class="panel"><h3>Standings</h3><table class="lines fz-stand"><thead><tr><th>Team</th><th>W-L</th><th>PF</th></tr></thead><tbody>
           ${d.standings.map((s, i) => `<tr class="${s.mine ? 'mine' : ''}"><td>${i + 1}. ${esc(s.team)}${i === d.standings.length - 1 ? ' 🚽' : i === 0 ? ' 👑' : ''}</td><td>${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''}</td><td>${s.pf.toFixed(0)}</td></tr>`).join('')}
         </tbody></table><p class="muted" style="font-size:12px;margin:8px 0 0">🚽 = last place. Check your league's punishment rules.</p></section>
-        <section class="panel"><h3>🌎 Around the League <small>week ${d.week}</small></h3><ul class="fz-around">
+        <section class="panel"><h3>Around the League <small>week ${d.week}</small></h3><ul class="fz-around">
           ${d.around.map((m) => `<li class="${m.mine ? 'mine' : ''}"><span>${esc(m.a.team)}</span><b>${m.a.points.toFixed(1)}</b><i>vs</i><b>${m.b.points.toFixed(1)}</b><span>${esc(m.b.team)}</span></li>`).join('')}
         </ul></section>
       </aside>
