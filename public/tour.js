@@ -37,7 +37,7 @@ async function renderTour() {
         <h3>Live Rooms</h3>
         <p>A Twitch-style room for every game: a live field drawn for each sport (the football chains move, basketball shot charts, a baseball diamond with runners), tappable play-by-play, a Hype Battle tug-of-war, quick polls like "4th down: go for it?", and big moments like TIP-OFF and RED ZONE.</p>
         <div class="tc-demo" id="tdLive"></div>
-        <a class="tc-link" id="tdLiveLink" href="#/live">Open the live rooms →</a>
+        <a class="tc-link" id="tdLiveLink" href="#/?status=in">See what's live →</a>
       </article>
       <article class="tour-card" style="--tc:var(--purple)">
         <h3>The Call &amp; Polls</h3>
@@ -51,7 +51,7 @@ async function renderTour() {
       </article>
       <article class="tour-card" style="--tc:var(--good)">
         <h3>Fantasy, Connected</h3>
-        <p>Plug in a Sleeper username to get your live matchup, the Fantasy Therapist, bench regret, standings and a league trash-talk thread. Your players are flagged on every game card.</p>
+        <p>Plug in a Sleeper username to get your live matchup, the Fantasy Therapist, bench regret, standings and every matchup around your league. Your players are flagged on every game card.</p>
         <div class="tc-demo" id="tdFantasy"></div>
         <a class="tc-link" href="#/fantasy">Connect a league →</a>
       </article>

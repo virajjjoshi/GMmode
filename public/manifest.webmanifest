@@ -17,7 +17,7 @@
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ],
   "shortcuts": [
-    { "name": "Live now", "url": "/#/live", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Live now", "url": "/#/?status=in", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Scores", "url": "/#/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Pick'em", "url": "/#/predict", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]

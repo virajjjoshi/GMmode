@@ -1,10 +1,17 @@
 /* Bets: link a sportsbook (via SharpSports, or the Demo Book), then sweat your
    bets live, share them for Tail or Fade, and enshrine your bad beats.
-   Loaded before app.js; uses its helpers at call time. */
+   These render as sections of the Takes hub (takes.js owns the page, the
+   section tabs and the sport switcher). Loaded before app.js; uses its
+   helpers at call time. */
 'use strict';
 
-const bt = { action: null, actionAt: 0, view: null, config: null, tab: 'sweat' };
-const BT_TABS = [['sweat', 'My bets'], ['feed', 'Tail or Fade'], ['hall', 'Bad Beat Hall of Fame']];
+const bt = { action: null, actionAt: 0, view: null, config: null, tab: 'sweat', sport: 'all' };
+// Takes hub section -> bets view, and the reverse for old #/bets/<view> links.
+const BT_SECTION = { mybets: 'sweat', tailfade: 'feed', badbeats: 'hall' };
+const BETS_REDIRECT = { sweat: 'mybets', feed: 'tailfade', hall: 'badbeats' };
+// A slip belongs to a sport if any of its legs is in that league.
+const btInSport = (x) => bt.sport === 'all' || (x.legs || []).some((l) => l.league === bt.sport);
+const btSportName = () => (bt.sport === 'all' ? '' : ` in ${typeof tkLeagueLabel === 'function' ? tkLeagueLabel(bt.sport) : bt.sport.toUpperCase()}`);
 
 const usd = (cents, sign = false) => {
   const v = Math.abs(cents || 0) / 100;
@@ -33,18 +40,18 @@ function sweatMeter(p, label = 'Chance to cash') {
   return `<div class="sweat" style="--p:${pct}%;--h:${Math.round(p * 125)}"><div class="sweat-top"><span>${label}</span><b>${pct}% · ${mood(p)}</b></div><div class="sweat-bar"><i></i></div></div>`;
 }
 
-// ---------- page ----------
-async function renderBets(sub) {
+// ---------- section (inside the Takes hub) ----------
+async function renderBetsSection(section, sport) {
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
-  bt.tab = BT_TABS.some(([k]) => k === sub) ? sub : 'sweat';
-  const app = $('#app');
-  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Bets</h1>
-    <p class="hero-sub">Link your sportsbook and sweat every bet live. Share one for the crowd to tail or fade, and immortalize your worst beats.</p></div>
-    <div id="bt"></div>
+  bt.tab = BT_SECTION[section] || 'sweat';
+  bt.sport = sport || 'all';
+  const host = $('#tkBody'); if (!host) return;
+  host.innerHTML = `<div id="bt"><div class="skeleton" style="height:280px"></div></div>
     <p class="bt-rg">21+ only. Read-only tracking: we never take, place, or hold bets. Bets are private unless you share one. If betting stops being fun, call <a href="tel:18004264237">1-800-GAMBLER</a>.</p>`;
   if (q.get('linked')) toast('Sportsbook linked. Your bets will show up after the first sync.');
   if (!bt.config) bt.config = await api('/bets/config').catch(() => ({ sharpsports: false, books: [] }));
-  try { bt.view = await api('/bets/me'); } catch (e) { $('#bt').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; return; }
+  try { bt.view = await api('/bets/me'); } catch (e) { if ($('#bt')) $('#bt').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p><button class="btn primary" type="button" data-retry>Try again</button></div>`; return; }
+  if (!$('#bt') || host !== $('#tkBody')) return; // navigated away while loading
   if (!bt.view.account?.age21) return paintAgeGate();
   paintBets();
   every(async () => {
@@ -60,18 +67,16 @@ function paintAgeGate() {
     <div class="row"><button class="btn primary" id="btYes">Yes, I'm 21+</button><button class="btn ghost" id="btNo">No</button></div>
   </section>`;
   $('#btYes').onclick = async () => {
-    try { await api('/bets/age', { method: 'POST', body: { confirm: true } }); renderBets(bt.tab); }
+    try { await api('/bets/age', { method: 'POST', body: { confirm: true } }); route(); }
     catch (e) { toast(e.message, true); }
   };
-  $('#btNo').onclick = () => { $('#bt').innerHTML = '<div class="empty-state"><p>Come back on your 21st birthday. We\'ll save you a seat. The rest of the site is all yours, though.</p><a class="btn primary" href="#/">Back to the scores</a></div>'; };
+  $('#btNo').onclick = () => { $('#bt').innerHTML = '<div class="empty-state"><p>Come back on your 21st birthday. We\'ll save you a seat. The takes are all yours, though.</p><a class="btn primary" href="#/takes">Back to the takes</a></div>'; };
 }
 
 function paintBets() {
   const linked = bt.view.account?.links?.length > 0;
   store.set('ttl:bets', { linked });
-  $('#bt').innerHTML = `
-    <div class="chips bt-tabs" role="tablist" aria-label="Bets sections">${BT_TABS.map(([k, l]) => `<a class="chip" role="tab" href="#/bets/${k}" aria-pressed="${k === bt.tab}" aria-selected="${k === bt.tab}">${l}</a>`).join('')}</div>
-    <div id="btBody"></div>`;
+  $('#bt').innerHTML = '<div id="btBody"></div>';
   if (bt.tab === 'feed') return paintFeed();
   if (bt.tab === 'hall') return paintHall();
   if (!linked) return paintBookConnect();
@@ -121,7 +126,8 @@ function wireConnect() {
 function paintSweat() {
   const body = $('#btBody'); if (!body || bt.tab !== 'sweat') return;
   const v = bt.view, s = v.stats;
-  const open = v.slips.filter((x) => !x.outcome), settled = v.slips.filter((x) => x.outcome);
+  const slips = v.slips.filter(btInSport);
+  const open = slips.filter((x) => !x.outcome), settled = slips.filter((x) => x.outcome);
   const hasDemo = v.account.links.some((l) => l.provider === 'demo');
   const hasReal = v.account.links.some((l) => l.provider === 'sharpsports');
   body.innerHTML = `
@@ -134,12 +140,13 @@ function paintSweat() {
       <div><b>${(s.roi * 100).toFixed(1)}%</b><span>ROI</span></div>
       <div><b>${usd(s.openRisk)} → ${usd(s.openToWin + s.openRisk)}</b><span>${s.open} open</span></div>
     </div>
+    ${bt.sport !== 'all' ? `<p class="muted bt-small">Record, net and ROI cover every sport. The lists below show bets${esc(btSportName())} only.</p>` : ''}
     <section class="panel bt-therapist"><h3>The Bet Therapist <small>${hasDemo ? 'Demo Book data' : 'updated daily'}</small></h3>
       <ul>${v.therapist.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></section>
     <h2 class="league-head">Live &amp; open <small class="muted">${open.length}</small></h2>
-    ${open.length ? `<div class="bt-grid">${open.map((x) => slipHTML(x, { own: true })).join('')}</div>` : '<div class="empty-state bt-empty"><p>No open bets. Your blood pressure thanks you.</p></div>'}
+    ${open.length ? `<div class="bt-grid">${open.map((x) => slipHTML(x, { own: true })).join('')}</div>` : `<div class="empty-state bt-empty"><p>No open bets${esc(btSportName())}. Your blood pressure thanks you.</p></div>`}
     <h2 class="league-head">Settled <small class="muted">${settled.length}</small></h2>
-    ${settled.length ? `<div class="bt-grid">${settled.map((x) => slipHTML(x, { own: true })).join('')}</div>` : '<div class="empty-state bt-empty"><p>Nothing settled yet.</p></div>'}`;
+    ${settled.length ? `<div class="bt-grid">${settled.map((x) => slipHTML(x, { own: true })).join('')}</div>` : `<div class="empty-state bt-empty"><p>Nothing settled yet${esc(btSportName())}.</p></div>`}`;
   wireSlips(body);
   $('#btSync').onclick = async (e) => {
     e.target.disabled = true;
@@ -152,14 +159,17 @@ function paintSweat() {
     b.onclick = async () => {
       if (!confirm('Disconnect this account? Its bets will be removed from Trash Talk Live.')) return;
       await api('/bets/unlink', { method: 'POST', body: { provider: b.dataset.unlink } }).catch(() => {});
-      bt.action = null; renderBets('sweat');
+      bt.action = null; route();
     };
   });
 }
 
 function legHTML(l) {
   const dot = l.result === 'win' ? 'win' : l.result === 'loss' ? 'loss' : l.result ? 'push' : l.status === 'winning' ? 'winning' : l.status === 'losing' ? 'losing' : l.state === 'in' ? 'push' : 'pending';
-  const liveLink = l.state === 'in' && l.gameId ? `<a class="bt-live" href="#/live/${esc(l.league)}/${esc(l.gameId)}">Live room</a>` : '';
+  // Every leg links back to its game: the live room while it's on, the takes thread otherwise.
+  const liveLink = !l.gameId ? ''
+    : l.state === 'in' ? `<a class="bt-live" href="#/live/${esc(l.league)}/${esc(l.gameId)}">Live room</a>`
+      : `<a class="bt-live bt-thread" href="#/game/${esc(l.league)}/${esc(l.gameId)}">Takes</a>`;
   return `<li class="bt-leg ${dot}"><span class="bt-dot" aria-hidden="true"></span>
     <span class="bt-leg-main"><b>${esc(l.label)}</b> <small class="muted">${esc(l.event || '')}${l.odds && l.odds !== -110 ? ` · ${l.odds > 0 ? '+' : ''}${esc(l.odds)}` : ''}</small><br><small>${esc(l.text || (l.result ? l.result.toUpperCase() : ''))}</small></span>${liveLink}</li>`;
 }
@@ -205,6 +215,7 @@ async function paintFeed(quiet = false) {
   let d;
   try { d = await api('/bets/feed'); } catch (e) { if (!quiet) body.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; return; }
   if (bt.tab !== 'feed' || !$('#btBody')) return;
+  d = { ...d, items: d.items.filter(btInSport) };
   const item = (x) => {
     const tot = x.tails + x.fades;
     const tp = tot ? Math.round((x.tails / tot) * 100) : 50;
@@ -217,7 +228,7 @@ async function paintFeed(quiet = false) {
       </div></div>`;
   };
   body.innerHTML = `<div class="bt-feed-wrap">
-    <div>${d.items.length ? d.items.map(item).join('') : '<div class="empty-state"><p>No shared bets yet. Share one from My Sweat and let the people decide.</p></div>'}</div>
+    <div>${d.items.length ? d.items.map(item).join('') : `<div class="empty-state"><p>No shared bets${esc(btSportName())} yet. Share one from My bets and let the people decide.</p></div>`}</div>
     <aside>
       <section class="panel"><h3>Fade these people <small>betting against them</small></h3>
         ${d.fadeBoard.length ? `<ol class="bt-board">${d.fadeBoard.map((r) => `<li>${esc(r.fan.avatar)} ${r.fan.sim ? '<span class="sim-tag">SIM</span>' : ''}<span>${esc(r.fan.name)}</span><b>${esc(r.fadeRecord)}</b></li>`).join('')}</ol><p class="muted bt-small">Record you'd have by betting against everything they shared.</p>` : '<p class="muted">Needs a few settled bets first.</p>'}</section>
@@ -238,7 +249,9 @@ async function paintHall() {
   body.innerHTML = '<div class="skeleton" style="height:320px"></div>';
   let d;
   try { d = await api('/bets/hall'); } catch (e) { body.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; return; }
-  if (!d.items.length) { body.innerHTML = '<div class="empty-state"><p>The Hall is empty. Lose a bet by half a point and you could be first.</p></div>'; return; }
+  if (bt.tab !== 'hall' || !$('#btBody')) return;
+  d = { ...d, items: d.items.filter(btInSport) };
+  if (!d.items.length) { body.innerHTML = `<div class="empty-state"><p>No bad beats${esc(btSportName())} yet. Lose a bet by half a point and you could be first.</p></div>`; return; }
   body.innerHTML = `<p class="muted">Lost by the hook, or a parlay that died on the last leg. Submitted by the victims themselves.</p>
     <ol class="bt-hall">${d.items.map((x, i) => `<li class="bt-plaque">
       <div class="bt-rank">${i + 1}</div>
@@ -264,7 +277,7 @@ function paintBetsLive() {
       <div class="bt-live-top"><b>${esc(m.label)}</b><span class="muted">${m.type === 'parlay' ? `${m.legs}-leg parlay` : 'single'} · ${usd(m.atRisk)} → ${usd(m.toWin)}</span></div>
       ${m.oneLegAway ? '<div class="bt-oneleg">One leg away: it all comes down to this game</div>' : ''}
       ${sweatMeter(m.type === 'parlay' ? m.slipP : m.legP, m.type === 'parlay' ? 'Parlay chance to cash' : 'Chance to cash')}
-      <small>${esc(m.text || '')}</small></div>`).join('') + '<a class="linkish bt-more" href="#/bets">All your bets →</a>';
+      <small>${esc(m.text || '')}</small></div>`).join('') + '<a class="linkish bt-more" href="#/takes/mybets">All your bets →</a>';
     return true;
   };
   fill(false);

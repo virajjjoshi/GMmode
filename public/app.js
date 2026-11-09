@@ -180,8 +180,15 @@ function route() {
   clearTimers();
   const h = location.hash.replace(/^#\/?/, '');
   const [view, a, b, c, d] = h.split('?')[0].split('/');
+  // Retired destinations: the Live lobby (rooms are reached from game cards) and
+  // the standalone Bets tab (now a section of Takes). Old links still land.
+  if (view === 'live' && !(a && b)) return location.replace('#/?status=in');
+  if (view === 'bets') {
+    const qs = h.split('?')[1];
+    return location.replace(`#/takes/${BETS_REDIRECT[a] || 'mybets'}${qs ? `?${qs}` : ''}`);
+  }
   if (typeof leaveLive === 'function') leaveLive();
-  const nav = ['hall', 'fantasy', 'predict', 'bets', 'live', 'tour'].includes(view) ? view : 'scores';
+  const nav = ['hall', 'fantasy', 'predict', 'takes', 'games', 'tour'].includes(view) ? view : 'scores';
   $$('.nav a').forEach((el) => {
     el.classList.toggle('active', el.dataset.nav === nav);
     if (el.dataset.nav === nav) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
@@ -189,11 +196,11 @@ function route() {
   document.body.dataset.view = view || 'scores';
   window.scrollTo(0, 0);
   if (view === 'game' && a && b) return renderGame(a, b);
-  if (view === 'live' && a && b) return renderLive(a, b);
-  if (view === 'live') return renderLiveLobby();
+  if (view === 'live') return renderLive(a, b);
   if (view === 'fantasy') return renderFantasy();
   if (view === 'predict') return renderPredict(a, b, c, d);
-  if (view === 'bets') return renderBets(a);
+  if (view === 'takes') return renderTakes(a);
+  if (view === 'games') return renderGames(a, b);
   if (view === 'tour') return renderTour();
   if (view === 'hall') return renderHall();
   return renderScores();
@@ -901,7 +908,7 @@ async function renderHall() {
       <div class="av">${esc(c.avatar || '🙂')}</div>
       <div class="take-body"><div class="take-meta"><b>${esc(c.name)}</b><span class="heat-tag ${esc(c.heat)}">${esc(c.heat)}</span><span class="t">${ago(c.createdAt)}</span></div>
       <p class="take-text">${esc(c.text)}</p>
-      <div class="take-meta"><span>🔥 ${c.fire} · 🧢 ${c.cap}</span><a class="take-link" href="${c.gameKey.startsWith('fl:') ? '#/fantasy' : `#/game/${esc(c.gameKey.replace(':', '/'))}`}">${esc(c.gameLabel)} →</a></div></div></article>`;
+      <div class="take-meta"><span>🔥 ${c.fire} · 🧢 ${c.cap}</span><a class="take-link" href="#/game/${esc(c.gameKey.replace(':', '/'))}">${esc(c.gameLabel)} →</a></div></div></article>`;
   const empty = (msg) => `<p class="muted">${msg}</p>`;
   app.innerHTML = `<div class="page-head"><h1 class="hero-title">Hall of Takes</h1>
     <p class="hero-sub">${d.totals.takes} take${d.totals.takes === 1 ? '' : 's'} across ${d.totals.games} games.</p></div>

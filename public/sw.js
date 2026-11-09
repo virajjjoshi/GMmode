@@ -5,7 +5,7 @@
    - /api/*: never touched. Scores and live rooms must always be live. */
 const BUILD = '__BUILD__';
 const CACHE = `ttl-${BUILD}`;
-const SHELL = ['/', '/styles.css', '/field.js', '/live.js', '/fantasy.js', '/predict.js', '/bets.js', '/tour.js', '/app.js', '/pwa.js', '/icon.svg', '/manifest.webmanifest'];
+const SHELL = ['/', '/styles.css', '/field.js', '/live.js', '/fantasy.js', '/predict.js', '/bets.js', '/takes.js', '/games.js', '/tour.js', '/app.js', '/pwa.js', '/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

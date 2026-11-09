@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Trash Talk Live: live scores with a crowd</title>
-  <meta name="description" content="Live scores for the NFL, NBA, MLB, NHL, college and soccer, with a live room and a trash-talk thread for every game. Pick'em leagues, fantasy, and bet tracking.">
+  <meta name="description" content="Live scores for the NFL, NBA, MLB, NHL, college and soccer, with a live room and a trash-talk thread for every game. Pick'em leagues, fantasy, bet tracking, and perfect-season challenges.">
   <meta name="theme-color" content="#0c0d10">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -35,11 +35,11 @@
     </a>
     <nav class="nav" aria-label="Main">
       <a href="#/" data-nav="scores">Scores</a>
-      <a href="#/live" data-nav="live"><span class="nav-dot" aria-hidden="true"></span>Live</a>
       <a href="#/fantasy" data-nav="fantasy">Fantasy</a>
       <a href="#/predict" data-nav="predict">Pick’em</a>
-      <a href="#/bets" data-nav="bets">Bets</a>
-      <a href="#/hall" data-nav="hall">Takes</a>
+      <a href="#/takes" data-nav="takes">Takes</a>
+      <a href="#/games" data-nav="games">Games</a>
+      <a href="#/hall" data-nav="hall">Hall of Takes</a>
     </nav>
     <button class="me-chip" id="meChip" type="button" title="Edit your fan identity">
       <span id="meAvatar">🙂</span><span id="meName">…</span>
@@ -53,8 +53,9 @@
   <footer class="foot">
     <nav class="foot-links" aria-label="Footer">
       <a href="#/tour">About</a>
-      <a href="#/live">Live Rooms</a>
       <a href="#/predict">Pick’em</a>
+      <a href="#/takes">Takes</a>
+      <a href="#/games">Games</a>
       <a href="#/hall">Hall of Takes</a>
       <button type="button" class="linkish" id="installBtn" hidden>Install the app</button>
     </nav>
@@ -88,6 +89,8 @@
   <script src="/fantasy.js"></script>
   <script src="/predict.js"></script>
   <script src="/bets.js"></script>
+  <script src="/takes.js"></script>
+  <script src="/games.js"></script>
   <script src="/tour.js"></script>
   <script src="/app.js"></script>
   <script src="/pwa.js"></script>
