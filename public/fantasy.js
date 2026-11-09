@@ -1,4 +1,4 @@
-/* Fantasy: connect Sleeper, see your matchup with jokes, trash-talk your league.
+/* Fantasy: connect Sleeper, see your matchup with jokes, standings and lineups.
    Loaded before app.js; uses its helpers at call time. */
 'use strict';
 
@@ -32,7 +32,7 @@ async function renderFantasy() {
   const f = fantasyLink();
   const app = $('#app');
   app.innerHTML = `<div class="page-head"><h1 class="hero-title">Fantasy</h1>
-    <p class="hero-sub">Connect your league. We'll show your matchup, point out your bench mistakes, and give you a place to trash-talk your league-mates.</p></div>
+    <p class="hero-sub">Connect your league. We'll show your live matchup, the standings, and every bench mistake you made.</p></div>
     <div id="fz"></div>`;
   if (!f?.userId) return paintConnect();
   if (!f.leagueId) return paintLeaguePicker();
@@ -70,7 +70,7 @@ function paintConnect(prefill = '') {
 function pickLeague(l) {
   const f = fantasyLink();
   setFantasyLink({ ...f, leagueId: l.id, leagueName: l.name });
-  toast(`Connected to ${l.name}. Let the trash talk begin.`);
+  toast(`Connected to ${l.name}. Let's see that matchup.`);
   renderFantasy();
 }
 
@@ -148,10 +148,6 @@ async function paintLeague() {
         <section class="panel"><h3>Fantasy therapist</h3><ul class="intern"><li><div class="bubble">${esc(d.therapist)}</div></li>
           ${d.regret ? `<li><div class="bubble"><b>Bench regret:</b> ${esc(d.regret.benched.name)} scored ${d.regret.benched.points.toFixed(1)} on your bench while ${esc(d.regret.started.name)} gave you ${d.regret.started.points.toFixed(1)}. That's ${d.regret.diff} points you left on the couch.</div></li>` : ''}</ul></section>
         ${me_ ? `<section class="panel"><h3>Lineups</h3><div class="fz-lineups">${lineup(me_, 'You')}${lineup(opp, 'Them')}</div></section>` : ''}
-        <section class="panel"><h3>League Trash Talk <small>for ${esc(d.league.name)} only</small></h3>
-          <div class="composer"><textarea id="flText" maxlength="500" placeholder="Talk your talk. @ your opponent. Bring receipts."></textarea>
-            <div class="composer-foot"><span class="posting-as">Posting as ${esc(me.avatar)} <b>${esc(me.name)}</b></span><span class="counter"></span><button class="btn primary" id="flPost">Post</button></div></div>
-          <div class="takes" id="flTakes"></div></section>
       </div>
       <aside class="side">
         <section class="panel"><h3>Standings</h3><table class="lines fz-stand"><thead><tr><th>Team</th><th>W-L</th><th>PF</th></tr></thead><tbody>
@@ -165,37 +161,6 @@ async function paintLeague() {
 
   $('#fzWeek').onchange = (e) => { fz.week = +e.target.value; paintLeague(); };
   $('#fzSwitch').onclick = () => { setFantasyLink({ ...f, leagueId: null }); fz.data = null; renderFantasy(); };
-  $('#flPost').onclick = postLeagueTake;
-  $('#flTakes').onclick = voteLeagueTake;
-  paintLeagueThread();
   clearTimers();
   if (d.live) every(paintLeague, 60000);
-  every(paintLeagueThread, 15000);
-}
-
-async function paintLeagueThread() {
-  const f = fantasyLink(); const el = $('#flTakes'); if (!el || !f?.leagueId) return;
-  try {
-    const { comments } = await api(`/fantasy/thread/${f.leagueId}`);
-    comments.sort((a, b) => b.createdAt - a.createdAt);
-    el.innerHTML = comments.length ? comments.map((c) => `<article class="take" data-id="${esc(c.id)}"><div class="av">${esc(c.avatar || '🙂')}</div><div class="take-body">
-        <div class="take-meta"><b>${esc(c.name)}</b>${c.mine ? '<span class="muted">(you)</span>' : ''}<span class="t">${ago(c.createdAt)}</span></div>
-        <p class="take-text">${esc(c.text)}</p>
-        <div class="take-actions"><button class="tact fire" data-act="fire" aria-pressed="${c.myVote === 'fire'}">🔥 ${c.fire}</button><button class="tact cap" data-act="cap" aria-pressed="${c.myVote === 'cap'}">🧢 ${c.cap}</button></div></div></article>`).join('')
-      : '<p class="muted">Quiet league. Suspiciously quiet. Somebody start something.</p>';
-  } catch { /* keep old */ }
-}
-async function postLeagueTake() {
-  const f = fantasyLink(), ta = $('#flText'), btn = $('#flPost');
-  if (ta.value.trim().length < 2) return toast('Say something! Even "booo" counts.', true);
-  btn.disabled = true;
-  try {
-    await api(`/fantasy/thread/${f.leagueId}`, { method: 'POST', body: { text: ta.value.trim(), leagueName: f.leagueName } });
-    ta.value = ''; confetti(60); paintLeagueThread();
-  } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
-}
-async function voteLeagueTake(e) {
-  const b = e.target.closest('[data-act]'); if (!b) return;
-  try { await api(`/comments/${b.closest('.take').dataset.id}/vote`, { method: 'POST', body: { kind: b.dataset.act } }); paintLeagueThread(); }
-  catch (err) { toast(err.message, true); }
 }

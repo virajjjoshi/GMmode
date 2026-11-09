@@ -17,6 +17,7 @@ const fantasy = require('./lib/fantasy');
 const predict = require('./lib/predict');
 const bets = require('./lib/bets').createBets({ users: store.getUser });
 store.setReceiptCheck(bets.service.hasReceipt);
+const games = require('./lib/games').createGames();
 const statics = require('./lib/static').createStatic(path.join(__dirname, 'public'));
 
 // ---------- config (all optional; see .env.example) ----------
@@ -259,21 +260,6 @@ async function api(req, res, url) {
       if (parts[4] === 'mine') return send(res, 200, await fantasy.myPlayers(parts[3], user));
       return send(res, 200, await fantasy.league(parts[3], user, week));
     }
-    // One trash-talk thread per fantasy league, reusing the takes store.
-    if (parts[1] === 'thread' && isNum(parts[2])) {
-      const key = `fl:${parts[2]}`;
-      if (method === 'GET') return send(res, 200, { comments: store.listComments(key, me) });
-      if (method === 'POST') {
-        if (!me) throw bad('Missing fan id.');
-        if (!limit(ip, 'post', 1, 4000)) throw new HttpError(429, 'Cooldown! Let that last take breathe for a few seconds.');
-        const body = await readBody(req);
-        const name = clean(body.name, 24), avatar = clean(body.avatar, 8), text = clean(body.text, 500);
-        if (name.length < 2 || text.length < 2) throw bad('Need a name and a take.');
-        store.setLabel(key, `${clean(body.leagueName, 40) || 'Fantasy league'} (Fantasy)`);
-        try { return send(res, 201, store.addComment(key, { uid: me, name, avatar, text, heat: 'spicy', parentId: body.parentId ? clean(body.parentId, 64) : null })); }
-        catch (e) { throw bad(e.message); }
-      }
-    }
   }
 
   // ----- Prediction Leagues -----
@@ -284,6 +270,19 @@ async function api(req, res, url) {
   // ----- Bets (linked sportsbooks) -----
   if (parts[0] === 'bets') {
     return bets.handle({ req, res, url, parts: parts.slice(1), me, ip, send, readBody, HttpError, clean, limit });
+  }
+
+  // ----- Games (historical perfect-season challenges) -----
+  if (parts[0] === 'games') {
+    return games.handle({ req, res, url, parts: parts.slice(1), me, ip, send, readBody, HttpError, clean, limit });
+  }
+
+  // Takes from every game thread, for the Takes hub.
+  if (method === 'GET' && parts[0] === 'takes') {
+    const league = url.searchParams.get('league') || null;
+    if (league && !espn.LEAGUES[league]) throw bad('unknown league');
+    const sort = ['hot', 'new', 'top'].includes(url.searchParams.get('sort')) ? url.searchParams.get('sort') : 'hot';
+    return send(res, 200, store.feed({ league, sort, uid: me, receipts: url.searchParams.get('money') === '1', limit: 40 }));
   }
 
   if (method === 'GET' && parts[0] === 'hall') return send(res, 200, store.hall());
@@ -333,7 +332,7 @@ server.listen(PORT, HOST, () => {
 // streams (clients reconnect to the new instance), and write every store to disk.
 let stopping = false;
 function flushAll() {
-  for (const [name, fn] of [['takes', store.flush], ['predict', predict.flush], ['bets', bets.flush]]) {
+  for (const [name, fn] of [['takes', store.flush], ['predict', predict.flush], ['bets', bets.flush], ['games', games.flush]]) {
     try { fn(); } catch (e) { console.error(`[shutdown] ${name} save failed: ${e.message}`); }
   }
 }

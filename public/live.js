@@ -21,28 +21,9 @@ function leaveLive() {
 
 const mutedNames = () => new Set(store.get('ttl:muted', []));
 
-// ---------- lobby ----------
-async function renderLiveLobby() {
-  const app = $('#app');
-  app.innerHTML = `<div class="page-head"><h1 class="hero-title">Live Rooms</h1>
-    <p class="hero-sub">Keep the game on your TV. This is the couch: live chat, reactions, and calls with bragging rights.</p></div>
-    <div id="lobby"><div class="grid">${'<div class="skeleton"></div>'.repeat(3)}</div></div>`;
-  const paint = async () => {
-    let games;
-    try { ({ games } = await api(`/scoreboard?league=all&date=${ymd(new Date())}`)); }
-    catch (e) { $('#lobby').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; return; }
-    const live = games.filter((g) => g.status.state === 'in').sort((x, y) => (y.viewers || 0) - (x.viewers || 0) || y.vibe.chaos - x.vibe.chaos);
-    const soon = games.filter((g) => g.status.state === 'pre' && new Date(g.date) - Date.now() < 4 * 3600e3).sort((x, y) => new Date(x.date) - new Date(y.date));
-    $('#lobby').innerHTML = (live.length
-      ? `<h2 class="league-head">On now <small>${live.length} room${live.length > 1 ? 's' : ''}</small></h2><div class="grid">${live.map(cardHTML).join('')}</div>`
-      : `<div class="empty-state"><p>Nothing live right now. The athletes are napping. So should you.</p></div>`)
-      + (soon.length ? `<h2 class="league-head">Starting soon <small>rooms open at kickoff</small></h2><div class="grid">${soon.map(cardHTML).join('')}</div>` : '');
-  };
-  await paint();
-  every(paint, 30000);
-}
-
 // ---------- room ----------
+// Rooms are opened from game cards, the ticker, Fantasy and Bets. (The old
+// lobby tab is gone; #/live redirects to the scoreboard's Live filter.)
 function renderLive(league, id) {
   leaveLive();
   Object.assign(lv, { league, id, game: null, call: null, myPick: null, leaders: [], pending: {}, ownSent: {}, tab: 'chat', stuckToBottom: true, unseen: 0,
@@ -50,7 +31,7 @@ function renderLive(league, id) {
   FIELD.sel = null;
   const app = $('#app');
   app.innerHTML = `
-    <div class="live-top"><a class="back" href="#/live">← All live rooms</a>
+    <div class="live-top"><a class="back" href="#/?status=in">← Live scores</a>
       <span class="live-top-r"><button type="button" class="btn ghost demo-btn" id="demoBtn" title="Fill the room with clearly-labelled simulated fans, for demos">Simulate a crowd</button>
       <a class="back" href="#/game/${esc(league)}/${esc(id)}">Game page &amp; thread →</a></span></div>
     <div class="live-wrap">
