@@ -560,97 +560,367 @@ test('sim: soccer allows draws and the objective is going unbeaten', () => {
   assert.equal(sim.tier('nba', { w: 75, l: 7, t: 0, otl: 0 }, 82).id, 'record');
 });
 
-// ---------- lifecycle ----------
-function fakeService({ uidSeed = 0 } = {}) {
-  const ts = fakeNbaSeason();
-  const history = {
-    standings: async () => ({ teams: [{ id: '1', name: ts.team.name, gp: 82, pf: 8200, pa: 8000 }], avgFor: 100 }),
-    teamSeason: async () => ts,
+
+// ---------- the draft: one pick per random team-season ----------
+// A fake history with many team-seasons. Each roster is a synthetic NBA team
+// with its own player ids, except one star athlete ("star") who played in
+// every season (the same person can't be drafted twice). p4 on every roster
+// went to the same college as the star.
+function fakeHistory() {
+  const calls = { teamSeason: 0 };
+  let failing = false;
+  const roster = (season, teamId) => {
+    const ts = fakeNbaSeason({ season });
+    ts.team = { id: String(teamId), name: `Team ${teamId}`, abbr: `T${teamId}`, logo: null };
+    ts.seasonLabel = SPORTS.nba.seasonLabel(season);
+    ts.league = { avgFor: 95 + (season % 10), teams: 30, slug: 'nba' };
+    const rename = (id) => (id === 'p1' ? 'star' : `${season}-${teamId}-${id}`);
+    ts.players = ts.players.map((p) => ({ ...p, id: rename(p.id), name: p.id === 'p1' ? 'Star Player' : `${p.name} (${season} T${teamId})` }));
+    ts.chemBios = Object.fromEntries(ts.players.map((p) => [p.id, { college: p.id === 'star' || p.id.endsWith('-p4') ? { id: 'c1', name: 'State U' } : null, past: [], nat: [], log: true }]));
+    ts.bios = Object.fromEntries(ts.players.map((p) => [p.id, { college: ts.chemBios[p.id].college?.name || null, known: true }]));
+    ts.pairs = {};
+    return ts;
   };
-  let t = 1_700_000_000_000 + uidSeed;
-  const svc = createService({ store: createStore(null), history, random: () => 0.5, now: () => t++ });
-  return { svc, ts };
+  const cache = new Map();
+  return {
+    calls,
+    fail(on) { failing = on; },
+    standings: async () => ({ teams: [1, 2, 3, 4].map((i) => ({ id: String(i), name: `Team ${i}`, gp: 82, pf: 8200, pa: 8000 })), avgFor: 100 }),
+    teamSeason: async (sport, season, id) => {
+      calls.teamSeason++;
+      if (failing) throw new Error('ESPN 503');
+      const k = `${season}|${id}`;
+      if (!cache.has(k)) cache.set(k, roster(season, id));
+      return cache.get(k);
+    },
+    names: async () => ({ teams: {}, nat: {} }),
+  };
+}
+function draftService({ seed = 'draft', store = createStore(null), history = fakeHistory() } = {}) {
+  let t = 1_700_000_000_000;
+  const R = sim.rng(seed);
+  return { svc: createService({ store, history, random: R.next, now: () => t++ }), store, history };
 }
 const ALICE = 'alice-0000-0000-0000', BOB = 'bob-00000-0000-0000';
+const rollKey = (v) => `${v.attempt.roll.season}|${v.attempt.roll.team.abbr}`;
+// The best player on the current roll who fits an open slot.
+const bestOpen = (v) => {
+  const open = v.attempt.open;
+  const fits = (p) => v.rules.slots.some((s) => open.some((k) => k.startsWith(`${s.id}.`)) && s.elig.some((g) => p.elig.includes(g)));
+  return v.pool.players.filter((p) => fits(p) && !v.attempt.picks.some((x) => x.playerId === p.id)).sort((a, b) => b.ppg - a.ppg)[0];
+};
 
-test('lifecycle: roll, draft (checked, scored, chemistry hints), lock, simulate, replay, rebuild', async () => {
-  const { svc, ts } = fakeService();
-  const v = await svc.roll(ALICE, 'nba');
-  assert.equal(v.attempt.sport, 'nba');
-  assert.equal(v.teamSeason.players.length, ts.players.length, 'pool is exactly the roster');
-  assert.ok(v.teamSeason.players.every((p) => Number.isFinite(p.ppg) && p.fp[p.group]), 'every player shows his real PPG');
+test('draft: the first roll is a real team-season; each pick rolls a new one; picks come only from the current roll', async () => {
+  const { svc } = draftService();
+  const v1 = await svc.start(ALICE, 'nba');
+  assert.equal(v1.attempt.roll.n, 1);
+  assert.ok(v1.attempt.roll.season && v1.attempt.roll.team.name, 'team and season rolled');
+  assert.equal(v1.pool.seasonLabel, v1.attempt.roll.seasonLabel, 'the roster shown is the rolled one');
+  assert.equal(v1.attempt.rerollUsed, false);
+  assert.equal(v1.attempt.picks.length, 0);
+  const id = v1.attempt.id;
+
+  const p1 = bestOpen(v1);
+  const v2 = await svc.pick(ALICE, id, { playerId: p1.id, roll: 1 });
+  assert.equal(v2.attempt.picks.length, 1);
+  assert.equal(v2.attempt.picks[0].seasonLabel, v1.attempt.roll.seasonLabel, 'the pick remembers where it came from');
+  assert.equal(v2.attempt.roll.n, 2, 'a new roll after the pick');
+  assert.notEqual(rollKey(v2), rollKey(v1), 'a different team-season');
+  assert.ok(v2.pool.players.every((p) => !p.id.startsWith(`${v1.attempt.roll.season}-${v1.attempt.roll.teamId}`)), 'a genuinely new roster from the server');
+  assert.equal(v2.attempt.rerollUsed, false, 'automatic rolls don\'t use the reroll');
+
+  // A player from the old roll isn't on the new one.
+  const oldPlayer = v1.pool.players.find((p) => p.id !== p1.id && p.id !== 'star');
+  await assert.rejects(svc.pick(ALICE, id, { playerId: oldPlayer.id, roll: 2 }), /wasn't on the .* roster/);
+  // Somebody else's challenge.
+  await assert.rejects(svc.pick(BOB, id, { playerId: bestOpen(v2).id, roll: 2 }), /someone else's/);
+
+  const p2 = bestOpen(v2);
+  const v3 = await svc.pick(ALICE, id, { playerId: p2.id, roll: 2 });
+  assert.deepEqual(v3.attempt.picks.map((p) => p.playerId), [p1.id, p2.id], 'earlier picks stay, in order');
+  assert.equal(v3.attempt.roll.n, 3);
+  assert.equal(new Set([rollKey(v1), rollKey(v2), rollKey(v3)]).size, 3, 'no team-season repeats in a draft');
+  assert.ok(v3.preview.combined > v2.preview.combined, 'combined PPG grows with each pick');
+});
+
+test('draft: one manual reroll, never a second; it swaps team and season, keeps the picks, and survives a refresh', async () => {
+  const { svc, store, history } = draftService({ seed: 'reroll' });
+  let v = await svc.start(ALICE, 'nba');
   const id = v.attempt.id;
+  v = await svc.pick(ALICE, id, { playerId: bestOpen(v).id, roll: 1 });
+  const before = v;
+  const r = await svc.reroll(ALICE, id, { roll: before.attempt.roll.n });
+  assert.equal(r.attempt.rerollUsed, true);
+  assert.equal(r.attempt.roll.n, before.attempt.roll.n + 1);
+  assert.notEqual(rollKey(r), rollKey(before), 'team and season replaced');
+  assert.deepEqual(r.attempt.picks.map((p) => p.playerId), before.attempt.picks.map((p) => p.playerId), 'picks untouched, draft not reset');
+  await assert.rejects(svc.reroll(ALICE, id, { roll: r.attempt.roll.n }), /already used your one reroll/);
+  // Still unavailable after more automatic rolls.
+  v = await svc.pick(ALICE, id, { playerId: bestOpen(r).id, roll: r.attempt.roll.n });
+  assert.equal(v.attempt.rerollUsed, true);
+  await assert.rejects(svc.reroll(ALICE, id, { roll: v.attempt.roll.n }), /already used your one reroll/);
+  // A "refresh": a fresh service on the same stored data resumes exactly.
+  const again = createService({ store, history, random: sim.rng('other').next });
+  const fresh = await again.view(ALICE, id);
+  assert.equal(fresh.attempt.rerollUsed, true);
+  assert.equal(fresh.attempt.roll.n, v.attempt.roll.n);
+  assert.equal(rollKey(fresh), rollKey(v));
+  assert.deepEqual(fresh.attempt.picks.map((p) => p.playerId), v.attempt.picks.map((p) => p.playerId));
+  await assert.rejects(again.reroll(ALICE, id, { roll: fresh.attempt.roll.n }), /already used your one reroll/);
+});
 
-  await assert.rejects(svc.saveSquad(ALICE, id, { 'G.0': 'p1', 'BENCH.0': 'p1' }), /already in your squad/);
-  await assert.rejects(svc.saveSquad(ALICE, id, { 'G.0': 'not-on-roster' }), /wasn't on this team's roster/);
-  await assert.rejects(svc.saveSquad(BOB, id, { 'G.0': 'p1' }), /someone else's/);
-  const part = await svc.saveSquad(ALICE, id, { 'G.0': 'p1' });
-  assert.equal(part.missing.length, 7);
-  assert.equal(part.preview.complete, false);
-  assert.equal(part.preview.combined, ts.players[0].pg.G);
-  assert.ok(part.preview.hints.p4, 'p4 would bring chemistry with p1');
-  assert.deepEqual(part.preview.hints.p4.with.map((w) => w.id), ['p1']);
-  assert.ok(!part.preview.hints.p3, 'no verified link, no hint');
+test('draft: the same athlete can\'t be drafted twice, even from another season', async () => {
+  const { svc } = draftService({ seed: 'dup' });
+  let v = await svc.start(ALICE, 'nba');
+  const id = v.attempt.id;
+  v = await svc.pick(ALICE, id, { playerId: 'star', roll: 1 });
+  assert.ok(v.pool.players.some((p) => p.id === 'star'), 'the star is on the next roster too (another season)');
+  await assert.rejects(svc.pick(ALICE, id, { playerId: 'star', roll: v.attempt.roll.n }), /already in your squad/);
+  // A chosen slot must be open and fit.
+  await assert.rejects(svc.pick(ALICE, id, { playerId: bestOpen(v).id, roll: v.attempt.roll.n, slot: v.attempt.picks[0].key }), /already filled/);
+  const center = v.pool.players.find((p) => p.elig.includes('C'));
+  await assert.rejects(svc.pick(ALICE, id, { playerId: center.id, roll: v.attempt.roll.n, slot: 'G.1' }), /can't fill a Guard slot/);
+});
+
+test('draft: double clicks and racing requests can\'t draft twice or roll twice', async () => {
+  const { svc, history } = draftService({ seed: 'race' });
+  const v = await svc.start(ALICE, 'nba');
+  const id = v.attempt.id;
+  const p = bestOpen(v);
+  const calls0 = history.calls.teamSeason;
+  const results = await Promise.allSettled([
+    svc.pick(ALICE, id, { playerId: p.id, roll: 1 }),
+    svc.pick(ALICE, id, { playerId: p.id, roll: 1 }),
+    svc.pick(ALICE, id, { playerId: v.pool.players.find((x) => x.id !== p.id).id, roll: 1 }),
+  ]);
+  assert.equal(results.filter((x) => x.status === 'fulfilled').length, 1, 'exactly one pick lands');
+  for (const x of results.filter((y) => y.status === 'rejected')) assert.equal(x.reason.code, 409);
+  const now = await svc.view(ALICE, id);
+  assert.equal(now.attempt.picks.length, 1);
+  assert.equal(now.attempt.roll.n, 2, 'exactly one new roll');
+  assert.ok(history.calls.teamSeason - calls0 < 20);
+  // Two rerolls at once: one wins, the reroll is used once.
+  const rr = await Promise.allSettled([svc.reroll(ALICE, id, { roll: 2 }), svc.reroll(ALICE, id, { roll: 2 })]);
+  assert.equal(rr.filter((x) => x.status === 'fulfilled').length, 1);
+  assert.equal((await svc.view(ALICE, id)).attempt.roll.n, 3);
+});
+
+test('draft: a failed roster download never counts as a roll and never uses the reroll', async () => {
+  const { svc, history, store } = draftService({ seed: 'fail' });
+  history.fail(true);
+  await assert.rejects(svc.start(ALICE, 'nba'), (e) => e.code === 503);
+  assert.equal(Object.keys(store.db.attempts).length, 0, 'a failed first roll creates no challenge');
+  history.fail(false);
+  let v = await svc.start(ALICE, 'nba');
+  const id = v.attempt.id;
+  // ESPN goes down right after a pick: the pick stands, the next roll can be retried.
+  const pick = bestOpen(v);
+  const loadPick = await history.teamSeason('nba', v.attempt.roll.season, v.attempt.roll.teamId); // warm
+  assert.ok(loadPick);
+  // ESPN goes down for anything not already downloaded (cached rosters still load).
+  const orig = history.teamSeason;
+  const known = new Set([`${v.attempt.roll.season}|${v.attempt.roll.teamId}`]);
+  history.teamSeason = async (sport, season, tid) => { if (known.has(`${season}|${tid}`)) return orig(sport, season, tid); throw new Error('ESPN 503'); };
+  v = await svc.pick(ALICE, id, { playerId: pick.id, roll: 1 });
+  assert.equal(v.attempt.picks.length, 1, 'the pick stands');
+  assert.equal(v.attempt.roll, null);
+  assert.equal(v.attempt.rollFailed, true, 'the UI is told to offer a retry');
+  assert.equal(v.pool, undefined, 'no empty draft screen: no roster is shown');
+  await assert.rejects(svc.nextRoll(ALICE, id), (e) => e.code === 503);
+  history.teamSeason = orig;
+  v = await svc.nextRoll(ALICE, id);
+  assert.equal(v.attempt.roll.n, 2);
+  assert.equal(v.attempt.rerollUsed, false, 'retrying an automatic roll isn\'t the reroll');
+  // A manual reroll that fails keeps the current team and the reroll.
+  const cur = await svc.view(ALICE, id);
+  const keep = new Set([`${cur.attempt.roll.season}|${cur.attempt.roll.teamId}`, `${cur.attempt.picks[0].season}|${cur.attempt.picks[0].team.abbr.slice(1)}`]);
+  history.teamSeason = async (sport, season, tid) => { if (keep.has(`${season}|${tid}`)) return orig(sport, season, tid); throw new Error('ESPN 503'); };
+  await assert.rejects(svc.reroll(ALICE, id, { roll: 2 }), (e) => e.code === 503);
+  history.teamSeason = orig;
+  const after = await svc.view(ALICE, id);
+  assert.equal(after.attempt.roll.n, 2);
+  assert.equal(after.attempt.rerollUsed, false);
+});
+
+test('draft: a complete squad locks, simulates on the first pick\'s real schedule, replays, and can be rebuilt', async () => {
+  const { svc } = draftService({ seed: 'full' });
+  let v = await svc.start(ALICE, 'nba');
+  const id = v.attempt.id, first = v.attempt.roll;
   await assert.rejects(svc.lock(ALICE, id), /Still to fill/);
   await assert.rejects(svc.simulate(ALICE, id), /Lock in your squad/);
+  while (!v.attempt.complete) v = await svc.pick(ALICE, id, { playerId: bestOpen(v).id, roll: v.attempt.roll.n });
+  assert.equal(v.attempt.picks.length, 8);
+  assert.equal(v.attempt.roll, null, 'no roll after the last pick');
+  assert.equal(new Set(v.attempt.picks.map((p) => `${p.season}|${p.team.abbr}`)).size, 8, 'eight different team-seasons');
+  assert.ok(v.preview.complete && v.preview.odds.avgWins > 0);
+  assert.ok(v.preview.chem.links.some((l) => l.kinds.some((k) => k.kind === 'college')) || !v.attempt.picks.some((p) => p.playerId.endsWith('-p4')), 'chemistry works across rosters');
+  await assert.rejects(svc.pick(ALICE, id, { playerId: 'x', roll: 9 }), /already complete/);
+  const wire = JSON.stringify(v.preview);
+  for (const k of ['"pct"', '"z"', '"z0"', '"strength"', '"sample"']) assert.ok(!wire.includes(k), `preview doesn't expose ${k}`);
 
-  const full = squad.best('nba', ts.players);
-  const saved = await svc.saveSquad(ALICE, id, full);
-  assert.equal(saved.preview.complete, true);
-  assert.ok(saved.preview.odds.chance >= 0 && saved.preview.odds.avgWins > 0);
-  assert.ok(saved.preview.chem.total > 0 && saved.preview.chem.links.length >= 1);
-  // Internal normalization never leaves the server.
-  const wire = JSON.stringify(saved.preview);
-  for (const k of ['"pct"', '"z"', '"z0"', '"strength"', '"perGame"', '"sample"']) assert.ok(!wire.includes(k), `preview doesn't expose ${k}`);
   await svc.lock(ALICE, id);
-  await assert.rejects(svc.saveSquad(ALICE, id, {}), /locked in/);
-
   const r1 = await svc.simulate(ALICE, id);
-  assert.equal(r1.result.n, 1);
+  assert.equal(r1.result.home.seasonLabel, first.seasonLabel, 'the first pick\'s team-season sets the schedule');
   assert.equal(r1.result.games.length, 82);
-  assert.equal(r1.attempt.runs[0].squad, undefined, 'seed and squad stay server-side');
-  const again = await svc.runView(BOB, id, 1); // anyone can view a shared result
-  assert.deepEqual(again.result.record, r1.result.record, 'replay is exact');
-  assert.deepEqual(again.result.games.map((g) => g.us), r1.result.games.map((g) => g.us));
-  assert.equal(again.result.drift, false);
-  assert.equal(again.attempt.mine, false);
-
+  assert.ok(r1.result.players.every((p) => p.from), 'every player shows where he was drafted from');
+  assert.ok(r1.result.mvp && r1.result.weakest);
   const r2 = await svc.simulate(ALICE, id);
-  assert.equal(r2.result.n, 2);
-  assert.notDeepEqual(r2.result.games.map((g) => [g.us, g.them]), r1.result.games.map((g) => [g.us, g.them]), 'running it back plays a new season');
-  svc.unlock(ALICE, id);
-  const unused = ts.players.find((p) => !Object.values(full).includes(p.id));
-  await svc.saveSquad(ALICE, id, { ...full, 'BENCH.2': unused.id });
-  await svc.lock(ALICE, id);
-  await svc.simulate(ALICE, id);
-  const replay1 = await svc.runView(ALICE, id, 1);
-  assert.deepEqual(replay1.result.record, r1.result.record, 'old runs keep their own squad and result');
+  assert.notDeepEqual(r2.result.games.map((g) => [g.us, g.them]), r1.result.games.map((g) => [g.us, g.them]), 'run it back: a new season');
+  const shared = await svc.runView(BOB, id, 1);
+  assert.deepEqual(shared.result.record, r1.result.record, 'a shared run replays exactly');
+  assert.equal(shared.attempt.roll, null, 'a viewer never sees the owner\'s live roll');
 
+  // Rebuild: a fresh draft with a fresh reroll; old runs keep their squad.
+  const rb = await svc.rebuild(ALICE, id);
+  assert.equal(rb.attempt.picks.length, 0);
+  assert.equal(rb.attempt.rerollUsed, false);
+  assert.equal(rb.attempt.locked, false);
+  assert.equal(rb.attempt.draft, 2);
+  const old = await svc.runView(ALICE, id, 1);
+  assert.deepEqual(old.result.record, r1.result.record);
+  assert.equal(old.result.picks.length, 8);
   const mine = svc.mine(ALICE);
-  assert.equal(mine.totals.runs, 3);
-  assert.ok(mine.best.nba && Number.isFinite(mine.runs[0].combined));
-  assert.equal(svc.mine(BOB).totals.runs, 0);
+  assert.equal(mine.totals.runs, 2);
+  assert.equal(mine.runs[0].teams, 8);
 });
 
-test('lifecycle: the client can\'t set PPG, chemistry or results; only player ids are accepted', async () => {
-  const { svc, ts } = fakeService();
-  const { attempt: { id } } = await svc.roll(ALICE, 'nba');
-  // Values must be roster ids; anything else in the squad is rejected outright.
-  await assert.rejects(svc.saveSquad(ALICE, id, { 'G.0': { id: 'p1', ppg: 999 } }), /wasn't on this team's roster/);
-  await assert.rejects(svc.saveSquad(ALICE, id, { 'G.0': 'p3', ppg: 999 }), /no ppg slot/);
-  const r = await svc.saveSquad(ALICE, id, { 'G.0': 'p3' });
-  assert.deepEqual(r.squad, { 'G.0': 'p3' });
-  assert.equal(r.preview.combined, ts.players.find((p) => p.id === 'p3').pg.G, 'PPG comes from the server\'s own data');
-  await assert.rejects(svc.simulate(BOB, id), /someone else's/);
+test('draft: challenges saved by the single-roster version still open and replay', async () => {
+  const history = fakeHistory();
+  const ts = await history.teamSeason('nba', 2010, '1');
+  const store = createStore(null);
+  const squadMap = squad.best('nba', ts.players);
+  // A locked attempt + one run in the old shape.
+  const legacy = { id: '00000000-0000-0000-0000-00000000000a', uid: ALICE, sport: 'nba', season: 2010, teamId: '1', team: { name: ts.team.name, abbr: ts.team.abbr }, seasonLabel: ts.seasonLabel, createdAt: 1, squad: squadMap, locked: true, runs: [] };
+  store.db.attempts = { [legacy.id]: legacy };
+  const { svc } = draftService({ store, history });
+  const r = await svc.simulate(ALICE, legacy.id);
+  assert.equal(r.result.games.length, 82);
+  assert.equal(r.attempt.picks.length, 8);
+  assert.equal(r.result.home.seasonLabel, ts.seasonLabel);
+  assert.deepEqual((await svc.runView(ALICE, legacy.id, 1)).result.record, r.result.record);
 });
 
-test('lifecycle: a roll that can\'t fill a squad is rerolled, then fails cleanly', async () => {
-  const thin = fakeNbaSeason();
-  thin.players = thin.players.filter((p) => !p.elig.includes('C')); // no centers on this roster
-  const svc = createService({
-    store: createStore(null), random: () => 0.1,
-    history: { standings: async () => ({ teams: [{ id: '1' }] }), teamSeason: async () => thin },
-  });
-  await assert.rejects(svc.roll(ALICE, 'nba'), /Couldn't pull a historical roster/);
-  await assert.rejects(svc.roll(ALICE, 'curling'), /Pick a sport/);
+test('draft: unknown sports and bad requests fail cleanly', async () => {
+  const { svc } = draftService();
+  await assert.rejects(svc.start(ALICE, 'curling'), /Pick a sport/);
+  const v = await svc.start(ALICE, 'nba');
+  await assert.rejects(svc.pick(ALICE, v.attempt.id, { playerId: 'nobody', roll: 1 }), /wasn't on the .* roster/);
+  await assert.rejects(svc.pick(ALICE, v.attempt.id, { playerId: bestOpen(v).id, roll: 1, slot: 'XX.0' }), /no XX.0 slot/);
+  await assert.rejects(svc.pick(ALICE, v.attempt.id, { playerId: bestOpen(v).id, roll: 7 }), (e) => e.code === 409);
+  await assert.rejects(svc.view(ALICE, '00000000-0000-0000-0000-000000000000'), /doesn't exist/);
+});
+
+// ---------- old single-roster challenges ----------
+const legacyAttempt = (over = {}) => ({ id: '00000000-0000-0000-0000-0000000000b1', uid: ALICE, sport: 'nba', season: 2010, teamId: '1', team: { name: 'Team 1', abbr: 'T1' }, seasonLabel: '2009-10', createdAt: 5, squad: {}, locked: false, runs: [], ...over });
+async function legacySetup(attempts) {
+  const history = fakeHistory();
+  const store = createStore(null);
+  store.db.attempts = Object.fromEntries(attempts.map((a) => [a.id, a]));
+  return { history, store, ...draftService({ store, history, seed: 'legacy' }) };
+}
+
+test('old drafts: an unfinished single-roster draft is upgraded once on open: picks kept, a real new roll, one reroll', async () => {
+  const old = legacyAttempt({ squad: { 'G.0': 'star', 'F.0': '2010-1-p4' } });
+  const { svc, store, history } = await legacySetup([old]);
+  const orig = await history.teamSeason('nba', 2010, '1');
+  const v = await svc.open(ALICE, old.id);
+  assert.equal(v.attempt.id, old.id, 'same challenge id');
+  assert.equal(v.attempt.legacy, false);
+  assert.equal(v.attempt.roll.n, 1, 'its first new roll');
+  assert.notEqual(`${v.attempt.roll.season}|${v.attempt.roll.teamId}`, '2010|1', 'not the old roster again');
+  assert.ok(v.pool.players.length > 0, 'the new roll\'s real roster is shown');
+  assert.equal(v.attempt.rerollUsed, false, 'one manual reroll available');
+  assert.equal(v.attempt.rollFailed, false, 'no "couldn\'t roll" screen');
+  assert.deepEqual(v.attempt.picks.map((p) => [p.key, p.playerId]), [['G.0', 'star'], ['F.0', '2010-1-p4']], 'existing selections kept');
+  const star = orig.players.find((p) => p.id === 'star');
+  assert.equal(v.attempt.picks[0].player.ppg, star.ppg, 'original player data kept (from his original roster)');
+  assert.equal(v.attempt.picks[0].seasonLabel, '2009-10');
+  assert.equal(v.homeSeason.seasonLabel, '2009-10', 'the old roster\'s schedule is still the schedule');
+  const rec = store.db.attempts[old.id];
+  assert.ok(rec.picks && rec.roll && rec.upgradedFrom === 'single-roster' && rec.squad === undefined, 'stored as a new-format draft');
+
+  // Idempotent: reopening and "refreshing" (a new service on the same data) change nothing.
+  const again = await svc.open(ALICE, old.id);
+  assert.equal(again.attempt.roll.n, 1);
+  assert.equal(again.attempt.rolls, 1, 'no extra rolls');
+  const svc2 = createService({ store, history, random: sim.rng('other').next });
+  const fresh = await svc2.open(ALICE, old.id);
+  assert.equal(fresh.attempt.roll.n, 1);
+  assert.equal(fresh.attempt.rerollUsed, false, 'the reroll allowance survives a refresh');
+
+  // The reroll works exactly once; automatic rolls continue the draft.
+  const rr = await svc2.reroll(ALICE, old.id, { roll: 1 });
+  assert.equal(rr.attempt.rerollUsed, true);
+  assert.equal(rr.attempt.roll.n, 2);
+  assert.equal(rr.attempt.picks.length, 2);
+  await assert.rejects(svc2.reroll(ALICE, old.id, { roll: 2 }), /already used your one reroll/);
+  const p = await svc2.pick(ALICE, old.id, { playerId: bestOpen(rr).id, roll: 2 });
+  assert.equal(p.attempt.picks.length, 3);
+  assert.deepEqual(p.attempt.picks.slice(0, 2).map((x) => x.playerId), ['star', '2010-1-p4']);
+  assert.equal(p.attempt.roll.n, 3, 'an automatic roll after the pick');
+  assert.equal(p.attempt.rerollUsed, true);
+  // And it finishes and simulates like any draft.
+  let v2 = p;
+  while (!v2.attempt.complete) v2 = await svc2.pick(ALICE, old.id, { playerId: bestOpen(v2).id, roll: v2.attempt.roll.n });
+  await svc2.lock(ALICE, old.id);
+  const r = await svc2.simulate(ALICE, old.id);
+  assert.equal(r.result.home.seasonLabel, '2009-10');
+  assert.equal(r.result.games.length, 82);
+});
+
+test('old drafts: locked, completed and simulated old challenges are never rewritten by opening them', async () => {
+  const history = fakeHistory();
+  const ts = await history.teamSeason('nba', 2010, '1');
+  const full = squad.best('nba', ts.players);
+  const lockedOld = legacyAttempt({ id: '00000000-0000-0000-0000-0000000000c1', squad: full, locked: true });
+  const doneOld = legacyAttempt({ id: '00000000-0000-0000-0000-0000000000c2', squad: full, locked: false });
+  const othersOld = legacyAttempt({ id: '00000000-0000-0000-0000-0000000000c3', uid: BOB, squad: { 'G.0': 'star' } });
+  const store = createStore(null);
+  store.db.attempts = { [lockedOld.id]: lockedOld, [doneOld.id]: doneOld, [othersOld.id]: othersOld };
+  const { svc } = draftService({ store, history, seed: 'locked' });
+  // Give the locked one a run history first (simulating is the user's own action).
+  const run = await svc.simulate(ALICE, lockedOld.id);
+  const snap = () => JSON.stringify([store.db.attempts[lockedOld.id], store.db.attempts[doneOld.id], store.db.attempts[othersOld.id]]);
+  const before = snap();
+  for (let i = 0; i < 2; i++) {
+    await svc.open(ALICE, lockedOld.id);
+    await svc.open(ALICE, doneOld.id);
+    await svc.open(ALICE, othersOld.id); // someone else's unfinished draft: read-only for Alice
+    await svc.open(BOB, lockedOld.id);
+    await svc.runView(BOB, lockedOld.id, 1);
+  }
+  svc.mine(ALICE);
+  // Saves caused by other challenges don't rewrite them either.
+  const other = await svc.start(ALICE, 'nba');
+  await svc.pick(ALICE, other.attempt.id, { playerId: bestOpen(other).id, roll: 1 });
+  assert.equal(snap(), before, 'old locked, completed and other people\'s challenges are byte-for-byte unchanged');
+  assert.ok(store.db.attempts[lockedOld.id].squad && !store.db.attempts[lockedOld.id].picks, 'still in the old format');
+  assert.equal(store.db.attempts[lockedOld.id].runs.length, 1, 'run history preserved');
+  const replay = await svc.runView(ALICE, lockedOld.id, 1);
+  assert.deepEqual(replay.result.record, run.result.record, 'its run replays exactly');
+  const done = await svc.open(ALICE, doneOld.id);
+  assert.equal(done.attempt.complete, true);
+  assert.equal(done.attempt.roll, null, 'a completed old squad gets no roll');
+  assert.equal(done.attempt.rollFailed, false);
+  await svc.lock(ALICE, doneOld.id);
+  assert.equal(store.db.attempts[doneOld.id].locked, true);
+  assert.ok(store.db.attempts[doneOld.id].squad && !store.db.attempts[doneOld.id].picks, 'locking an old finished squad keeps its old format');
+});
+
+test('old drafts: if the original roster can\'t load, the old draft is left exactly as it was and upgrades on a later open', async () => {
+  const old = legacyAttempt({ squad: { 'G.0': 'star' } });
+  const { svc, store, history } = await legacySetup([old]);
+  const before = JSON.stringify(store.db.attempts[old.id]);
+  history.fail(true);
+  const v = await svc.open(ALICE, old.id);
+  assert.equal(v.attempt.roll, null);
+  assert.equal(v.attempt.rollFailed, true, 'the UI offers a retry instead of a broken page');
+  assert.equal(JSON.stringify(store.db.attempts[old.id]), before, 'nothing written');
+  await assert.rejects(svc.nextRoll(ALICE, old.id), (e) => e.code === 503);
+  assert.equal(JSON.stringify(store.db.attempts[old.id]), before);
+  history.fail(false);
+  const ok = await svc.open(ALICE, old.id);
+  assert.equal(ok.attempt.roll.n, 1);
+  assert.equal(ok.attempt.rerollUsed, false);
+  assert.deepEqual(ok.attempt.picks.map((p) => p.playerId), ['star']);
 });
