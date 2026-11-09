@@ -1544,7 +1544,8 @@ tr.gm-flash td { animation: gm-flash 2.4s ease-out 1; }
 
 @media (max-width: 960px) {
   .gm-mobilebar { position: sticky; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 14px -16px -50px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(8px); border-top: 1px solid var(--line); font-size: 14px; }
-  .gm-board { order: -1; }
+  /* The current roll comes first: it changes every pick. Progress, PPG and the
+     reroll stay in the sticky bar. */
   .gm-draft .gm-rules { display: none; }
 }
 @media (max-width: 640px) {
@@ -1566,3 +1567,23 @@ tr.gm-flash td { animation: gm-flash 2.4s ease-out 1; }
 .gm-formula td, .gm-formula th { text-align: left; }
 .gm-formula .num { text-align: right; }
 .gm-list { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 6px; }
+
+/* games: one pick per random team-season */
+.gm-howto { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--card); font-size: 14px; }
+.gm-howto p { margin: 0; color: var(--ink-2); }
+.gm-howto span { font-size: 18px; line-height: 1.2; }
+.gm-rollcard { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin: 0 0 12px; padding: 12px; border-radius: 10px; background: var(--card-2); border: 1px solid var(--line); border-left: 4px solid var(--gm-c, var(--accent)); }
+.gm-rolllogo, .gm-rollcard .logo-fallback { width: 44px; height: 44px; object-fit: contain; }
+.gm-rollmain { min-width: 0; display: grid; gap: 1px; }
+.gm-rollmain b { font-family: var(--display); font-size: 22px; line-height: 1.1; text-transform: uppercase; }
+.gm-rollmain small { font-size: 12px; color: var(--ink-2); }
+.gm-reroll { display: grid; justify-items: end; gap: 2px; }
+.gm-reroll .btn { white-space: nowrap; }
+.gm-reroll small { font-size: 11px; }
+.gm-pickno { font-size: 11px; font-weight: 700; color: var(--muted); padding-right: 4px; }
+.gm-mobilebar .btn { padding: 6px 10px; }
+@media (max-width: 640px) {
+  .gm-rollcard { grid-template-columns: auto 1fr; }
+  .gm-reroll { grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: center; justify-items: start; gap: 8px; }
+  .gm-rollmain b { font-size: 19px; }
+}
