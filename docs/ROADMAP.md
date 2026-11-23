@@ -17,6 +17,7 @@ What we're building, in what order, and the decisions still open.
 | v0.4 | **Prediction Leagues**: public and private pick'em leagues across all sports, invites, server-enforced deadlines, weekly and season standings, ESPN Matchup Predictor where ESPN publishes it, personal stats |
 | v0.5 | **💸 Bets**: link a sportsbook (SharpSports, plus a Demo Book), live Sweat Meter, parlay tracker with ONE LEG AWAY, your action on game cards and in live rooms, Tail or Fade, Bad Beat Hall of Fame, Bet Therapist, 💸 receipts on takes, 21+ gate |
 | v1.0 | **Production pass**: a new visual design (condensed sports type, one accent color, no decorative emoji), score ticker, installable app with icons, share cards, security headers and CSP, compression and caching, `/healthz`, graceful shutdown, Docker + Fly config. See [DEPLOY.md](DEPLOY.md) |
+| v1.1 | **GM Mode (MLB)**: run a real team through the live offseason: today's 40-man rosters and free agents, signings with agent counters, AI trade partners that contend or rebuild, budgets, a 12-week market, and a full 162-game + postseason sim. See [GM.md](GM.md) |
 
 ### Bets: next
 

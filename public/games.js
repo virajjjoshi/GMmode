@@ -23,6 +23,7 @@ function renderGames(a, b) {
   clearInterval(gm.revealT);
   if (a === 'play' && b) return renderGamePlay(b);
   if (a === 'how') return renderGamesHow();
+  if (a === 'gm') return renderOffice(b); // GM Mode (public/office.js)
   return renderGamesHome();
 }
 
@@ -59,6 +60,13 @@ async function renderGamesHome() {
   app.innerHTML = `
     <div class="page-head"><h1 class="hero-title">Games</h1>
       <p class="hero-sub">Build a squad from all of history, one random team at a time, on real fantasy production. Can you run the table?</p></div>
+    <a class="fo-promo" href="#/games/gm">
+      <span class="fo-promo-k">New · GM Mode</span>
+      <b>Run a real MLB team through this offseason</b>
+      <span>Today's 40-man rosters and free agents. Sign players, make trades, manage the budget, then simulate the season.</span>
+      <span class="btn primary">Be the GM</span>
+    </a>
+    <h2 class="league-head">Perfect-season challenges</h2>
     <ol class="gm-steps" aria-label="How a challenge works">
       <li><b>1</b><span><strong>Roll</strong> a random team &amp; season</span></li>
       <li><b>2</b><span><strong>Draft</strong> one player from its real roster</span></li>

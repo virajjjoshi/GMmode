@@ -18,6 +18,7 @@ const predict = require('./lib/predict');
 const bets = require('./lib/bets').createBets({ users: store.getUser });
 store.setReceiptCheck(bets.service.hasReceipt);
 const games = require('./lib/games').createGames();
+const office = require('./lib/office').createOffice();
 const statics = require('./lib/static').createStatic(path.join(__dirname, 'public'));
 
 // ---------- config (all optional; see .env.example) ----------
@@ -273,6 +274,11 @@ async function api(req, res, url) {
   }
 
   // ----- Games (historical perfect-season challenges) -----
+  // ----- GM Mode (MLB offseason front office) -----
+  if (parts[0] === 'office') {
+    return office.handle({ req, res, url, parts: parts.slice(1), me, ip, send, readBody, HttpError, clean, limit });
+  }
+
   if (parts[0] === 'games') {
     return games.handle({ req, res, url, parts: parts.slice(1), me, ip, send, readBody, HttpError, clean, limit });
   }
@@ -332,7 +338,7 @@ server.listen(PORT, HOST, () => {
 // streams (clients reconnect to the new instance), and write every store to disk.
 let stopping = false;
 function flushAll() {
-  for (const [name, fn] of [['takes', store.flush], ['predict', predict.flush], ['bets', bets.flush], ['games', games.flush]]) {
+  for (const [name, fn] of [['takes', store.flush], ['predict', predict.flush], ['bets', bets.flush], ['games', games.flush], ['gm', office.flush]]) {
     try { fn(); } catch (e) { console.error(`[shutdown] ${name} save failed: ${e.message}`); }
   }
 }
